@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/config/firebase';
 import { 
   collection, 
@@ -27,10 +27,9 @@ import { useRouter } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import DateRangeFilter from '@/components/DateRangeFilter';
 import { exportToCSV } from '@/utils/exportData';
-import TabNavigation from '@/components/TabNavigation';
+import TabNavigation, { TabId } from '@/components/TabNavigation';
 import AnalyticsDashboard from '@/components/analytics/AnalyticsDashboard';
 import Link from 'next/link';
-import { TabId } from '@/components/TabNavigation';
 import type { TaskFiltersState } from '@/components/tasks/TaskFilters';
 
 interface EditingTodo {
@@ -95,7 +94,7 @@ export default function DashboardPage() {
     start: new Date(new Date().setDate(new Date().getDate() - 30)),
     end: new Date()
   });
-  const [activeTab, setActiveTab] = useState<TabId>('tasks');
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
 
   // Add this state for task filters
   const [taskFilters, setTaskFilters] = useState<TaskFiltersState>({
@@ -398,9 +397,9 @@ export default function DashboardPage() {
               </Link>
               <nav className="hidden md:flex gap-6">
                 <button
-                  onClick={() => setActiveTab('tasks')}
+                  onClick={() => setActiveTab('dashboard')}
                   className={`font-dm transition-colors ${
-                    activeTab === 'tasks' 
+                    activeTab === 'dashboard' 
                       ? 'text-gray-900' 
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
@@ -455,55 +454,74 @@ export default function DashboardPage() {
             <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
             
             <div className="mt-8">
-              {activeTab === 'tasks' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4 }}
-                >
-                  <TaskList
-                    tasks={filteredTodos}
-                    onToggle={toggleTodo}
-                    onDelete={deleteTodo}
-                    onEdit={startEditing}
-                    onDragEnd={onDragEnd}
-                    onAddTodo={addTodo}
-                    filters={taskFilters}
-                    onFilterChange={(newFilters: TaskFiltersState) => setTaskFilters(newFilters)}
-                    availableLabels={allLabels}
-                  />
-                </motion.div>
-              )}
-              
-              {activeTab === 'goals' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4 }}
-                >
-                  <Goals userId={user?.uid || ''} todos={todos} />
-                </motion.div>
-              )}
+              <AnimatePresence mode="wait">
+                {activeTab === 'dashboard' && (
+                  <motion.div
+                    key="tasks"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                  >
+                    <TaskList
+                      tasks={filteredTodos}
+                      onToggle={toggleTodo}
+                      onDelete={deleteTodo}
+                      onEdit={startEditing}
+                      onDragEnd={onDragEnd}
+                      onAddTodo={addTodo}
+                      filters={taskFilters}
+                      onFilterChange={(newFilters: TaskFiltersState) => setTaskFilters(newFilters)}
+                      availableLabels={allLabels}
+                    />
+                  </motion.div>
+                )}
+                
+                {activeTab === 'goals' && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    <Goals userId={user?.uid || ''} todos={todos} />
+                  </motion.div>
+                )}
 
-              {activeTab === 'analytics' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4 }}
-                >
-                  <AnalyticsDashboard
-                    todos={todos}
-                    dateRange={dateRange}
-                    onDateRangeChange={setDateRange}
-                    onExport={handleExport}
-                    analytics={analytics}
-                  />
-                </motion.div>
-              )}
+                {activeTab === 'analytics' && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    <AnalyticsDashboard
+                      todos={todos}
+                      dateRange={dateRange}
+                      onDateRangeChange={setDateRange}
+                      onExport={handleExport}
+                      analytics={analytics}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </div>
       </main>
+
+      {/* Task Creation Button */}
+      {activeTab === 'dashboard' && (
+        <motion.button
+          onClick={() => setActiveTab('dashboard')}
+          className={`fixed bottom-8 right-8 p-4 rounded-full shadow-lg ${
+            activeTab === 'dashboard'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-white text-gray-600'
+          }`}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <span className="text-2xl">+</span>
+        </motion.button>
+      )}
     </div>
   );
 } 
