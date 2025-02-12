@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        'space': ['Space Grotesk', 'sans-serif'],
+        space: ['Space Grotesk', 'sans-serif'],
         'dm': ['DM Sans', 'sans-serif'],
       },
       animation: {

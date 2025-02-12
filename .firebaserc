@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "login-app-156f1"
-  }
+  },
+  "targets": {
+    "login-app-156f1": {
+      "hosting": {
+        "task-project-123": [
+          "task-project-123"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

@@ -31,6 +31,9 @@ import TabNavigation, { TabId } from '@/components/TabNavigation';
 import AnalyticsDashboard from '@/components/analytics/AnalyticsDashboard';
 import Link from 'next/link';
 import type { TaskFiltersState } from '@/components/tasks/TaskFilters';
+import Calendar from '@/components/tasks/Calendar';
+import Toast from '@/components/Toast';
+import Settings from '@/components/settings/Settings';
 
 interface EditingTodo {
   id: string;
@@ -38,6 +41,7 @@ interface EditingTodo {
   description?: string;
   priority: 'low' | 'medium' | 'high';
   dueDate?: Date;
+  dueTime?: string;
 }
 
 interface UpdateTodoData {
@@ -46,8 +50,17 @@ interface UpdateTodoData {
   completed?: boolean;
   priority?: TodoPriority;
   dueDate?: Date;
+  dueTime?: string;
   labels?: string[];
   status?: TodoStatus;
+}
+
+// Add this type at the top with other interfaces
+interface ToastMessage {
+  id: string;
+  message: string;
+  type: 'success' | 'error';
+  undoAction?: () => void;
 }
 
 // Add these utility functions at the top of the file, outside the component
@@ -95,17 +108,48 @@ export default function DashboardPage() {
     end: new Date()
   });
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [isFormVisible, setIsFormVisible] = useState(false);
 
   // Add this state for task filters
   const [taskFilters, setTaskFilters] = useState<TaskFiltersState>({
     labels: [] as TaskLabel[],
     priority: 'all',
-    completed: 'all',
-    search: ''
+    search: '',
+    showCompleted: false,
+    sort: 'dueDate-asc'
   });
+
+  // Add this to your existing state declarations
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
   // Get all unique labels from todos
   const allLabels = Array.from(new Set(todos.flatMap(todo => todo.labels || [])));
+
+  // Replace the single toast state with an array of toasts
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Store the last deleted/completed task for undo functionality
+  const [lastAction, setLastAction] = useState<{
+    type: 'delete' | 'complete';
+    task: Todo;
+  } | null>(null);
+
+  // Add this helper function to add toasts
+  const addToast = (toast: Omit<ToastMessage, 'id'>) => {
+    const newToast = {
+      ...toast,
+      id: Math.random().toString(36).substr(2, 9)
+    };
+    setToasts(prev => [...prev, newToast]);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== newToast.id));
+    }, 5000);
+  };
+
+  // Add state for settings modal
+  const [showSettings, setShowSettings] = useState(false);
 
   // Handle mounting
   useEffect(() => {
@@ -150,7 +194,8 @@ export default function DashboardPage() {
             dueDate: dueDate,
             labels: data.labels || [],
             userId: data.userId,
-            status: data.status || 'pending'
+            status: data.status || 'pending',
+            dueTime: data.dueTime || null
           };
         });
 
@@ -265,74 +310,116 @@ export default function DashboardPage() {
   };
 
   const addTodo = async (todoData: Partial<Todo>) => {
-    if (!user) return;
-
-    setIsAdding(true);
-    setError('');
-
     try {
       const newTodo = {
-        userId: user.uid,
-        title: todoData.title || '',
-        description: todoData.description || '',
+        title: todoData.title,
+        description: todoData.description,
         completed: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        userId: user?.uid,
+        priority: todoData.priority || 'medium',
+        dueDate: todoData.dueDate ? Timestamp.fromDate(todoData.dueDate) : null,
+        dueTime: todoData.dueTime || null,
         order: todos.length,
-        priority: todoData.priority || 'low',
-        labels: todoData.labels || [],
-        status: todoData.status || 'pending'
+        labels: todoData.labels || []
       };
 
       await addDoc(collection(db, 'todos'), newTodo);
+      setIsFormVisible(false);
     } catch (error) {
       console.error('Error adding todo:', error);
-      setError('Failed to add todo. Please try again.');
-    } finally {
-      setIsAdding(false);
     }
   };
 
   const toggleTodo = async (todoId: string, completed: boolean) => {
-    setError('');
+    const taskToToggle = todos.find(t => t.id === todoId);
+    if (!taskToToggle) return;
+
+    setLastAction({
+      type: 'complete',
+      task: { ...taskToToggle }
+    });
+
     try {
       await updateDoc(doc(db, 'todos', todoId), {
-        completed: !completed,
+        completed: completed,
+      });
+      addToast({
+        message: completed ? 'Task completed!' : 'Task uncompleted!',
+        type: 'success',
+        undoAction: async () => {
+          await updateDoc(doc(db, 'todos', todoId), {
+            completed: !completed,
+          });
+        }
       });
     } catch (error) {
-      setError('Failed to update todo. Please try again.');
-      console.error('Error updating todo:', error);
+      addToast({
+        message: 'Failed to update task',
+        type: 'error'
+      });
     }
   };
 
   const deleteTodo = async (todoId: string) => {
-    setError('');
+    const taskToDelete = todos.find(t => t.id === todoId);
+    if (!taskToDelete) return;
+
+    setLastAction({
+      type: 'delete',
+      task: { ...taskToDelete }
+    });
+
     try {
       await deleteDoc(doc(db, 'todos', todoId));
+      addToast({
+        message: 'Task deleted',
+        type: 'success',
+        undoAction: async () => {
+          const { id, ...taskData } = taskToDelete;
+          await addDoc(collection(db, 'todos'), taskData);
+        }
+      });
     } catch (error) {
-      setError('Failed to delete todo. Please try again.');
-      console.error('Error deleting todo:', error);
+      addToast({
+        message: 'Failed to delete task',
+        type: 'error'
+      });
     }
   };
 
-  const updateTodo = async (todoId: string, updates: UpdateTodoData) => {
-    const todoRef = doc(db, 'todos', todoId);
-    const updateData: any = {
-      ...updates,
-      updatedAt: serverTimestamp()
-    };
-
+  const updateTodo = async (todoData: Todo) => {
     try {
-      // Convert Date to Timestamp for Firestore
-      if (updates.dueDate) {
-        updateData.dueDate = serverTimestamp();
-        updateData.dueDate = Timestamp.fromMillis(updates.dueDate.getTime());
+      const todoRef = doc(db, 'todos', todoData.id);
+      const updateData: any = {
+        title: todoData.title,
+        description: todoData.description,
+        priority: todoData.priority,
+        labels: todoData.labels || [],
+        updatedAt: serverTimestamp()
+      };
+
+      if (todoData.dueDate) {
+        updateData.dueDate = Timestamp.fromDate(new Date(todoData.dueDate));
+      }
+      
+      if (todoData.dueTime !== undefined) {
+        updateData.dueTime = todoData.dueTime || null;
       }
 
       await updateDoc(todoRef, updateData);
+      setEditingTodo(null);
+      addToast({
+        message: 'Task updated successfully!',
+        type: 'success'
+      });
     } catch (error) {
       console.error('Error updating todo:', error);
-      setError('Failed to update todo');
+      addToast({
+        message: 'Failed to update task',
+        type: 'error'
+      });
     }
   };
 
@@ -343,6 +430,7 @@ export default function DashboardPage() {
       description: todo.description || '',
       priority: todo.priority || 'low',
       dueDate: todo.dueDate,
+      dueTime: todo.dueTime
     });
   };
 
@@ -351,11 +439,50 @@ export default function DashboardPage() {
     setError('');
   };
 
-  const filteredTodos = todos.filter(todo => {
-    if (taskFilters.completed !== 'all') {
-      if (taskFilters.completed === 'completed' && !todo.completed) return false;
-      if (taskFilters.completed === 'active' && todo.completed) return false;
-    }
+  // This one for the task list (excluding completed tasks by default)
+  const filteredListTodos = todos
+    .filter(todo => {
+      // Hide completed tasks unless showCompleted is true
+      if (todo.completed && !taskFilters.showCompleted) return false;
+      
+      // Apply other filters
+      if (taskFilters.priority !== 'all' && todo.priority !== taskFilters.priority) return false;
+      if (taskFilters.search && !todo.title.toLowerCase().includes(taskFilters.search.toLowerCase())) return false;
+      if (taskFilters.labels.length > 0 && !taskFilters.labels.every(label => todo.labels?.includes(label))) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // First sort by completion status (completed tasks always at bottom if shown)
+      if (a.completed !== b.completed) {
+        return a.completed ? 1 : -1;
+      }
+      
+      // Then sort by due date if both tasks have due dates
+      if (a.dueDate && b.dueDate) {
+        const dateA = new Date(a.dueDate).getTime();
+        const dateB = new Date(b.dueDate).getTime();
+        
+        // Consider time if available
+        if (a.dueTime && b.dueTime) {
+          const timeA = new Date(`${a.dueDate.toDateString()} ${a.dueTime}`).getTime();
+          const timeB = new Date(`${b.dueDate.toDateString()} ${b.dueTime}`).getTime();
+          return taskFilters.sort === 'dueDate-asc' ? timeA - timeB : timeB - timeA;
+        }
+        
+        return taskFilters.sort === 'dueDate-asc' ? dateA - dateB : dateB - dateA;
+      }
+      
+      // If only one task has a due date, it should come first
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      
+      // If neither has a due date, sort by title
+      return a.title.localeCompare(b.title);
+    });
+
+  // This one for the calendar (including completed tasks)
+  const filteredCalendarTodos = todos.filter(todo => {
+    // Apply filters except completion status (handled in Calendar component)
     if (taskFilters.priority !== 'all' && todo.priority !== taskFilters.priority) return false;
     if (taskFilters.search && !todo.title.toLowerCase().includes(taskFilters.search.toLowerCase())) return false;
     if (taskFilters.labels.length > 0 && !taskFilters.labels.every(label => todo.labels?.includes(label))) return false;
@@ -370,6 +497,13 @@ export default function DashboardPage() {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     transition: { duration: 0.6 }
+  };
+
+  const handleTabChange = (tab: TabId) => {
+    setActiveTab(tab);
+    // Reset any form visibility when switching tabs
+    setIsFormVisible(false);
+    setEditingTodo(null);
   };
 
   if (loading) {
@@ -397,7 +531,7 @@ export default function DashboardPage() {
               </Link>
               <nav className="hidden md:flex gap-6">
                 <button
-                  onClick={() => setActiveTab('dashboard')}
+                  onClick={() => handleTabChange('dashboard')}
                   className={`font-dm transition-colors ${
                     activeTab === 'dashboard' 
                       ? 'text-gray-900' 
@@ -407,7 +541,7 @@ export default function DashboardPage() {
                   Tasks
                 </button>
                 <button
-                  onClick={() => setActiveTab('goals')}
+                  onClick={() => handleTabChange('goals')}
                   className={`font-dm transition-colors ${
                     activeTab === 'goals' 
                       ? 'text-gray-900' 
@@ -417,7 +551,7 @@ export default function DashboardPage() {
                   Goals
                 </button>
                 <button
-                  onClick={() => setActiveTab('analytics')}
+                  onClick={() => handleTabChange('analytics')}
                   className={`font-dm transition-colors ${
                     activeTab === 'analytics' 
                       ? 'text-gray-900' 
@@ -429,9 +563,32 @@ export default function DashboardPage() {
               </nav>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 font-dm">
-                {user?.email}
-              </span>
+              <Link
+                href="/settings"
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                aria-label="Profile Settings"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-5 w-5 text-gray-600" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="btn-hover-effect px-4 py-2 bg-gray-900 text-white rounded-full font-dm text-sm hover:bg-gray-800 transition-all duration-300"
@@ -451,36 +608,72 @@ export default function DashboardPage() {
             animate="animate"
             variants={fadeIn}
           >
-            <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
             
             <div className="mt-8">
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" initial={false}>
                 {activeTab === 'dashboard' && (
                   <motion.div
                     key="tasks"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    <TaskList
-                      tasks={filteredTodos}
-                      onToggle={toggleTodo}
-                      onDelete={deleteTodo}
-                      onEdit={startEditing}
-                      onDragEnd={onDragEnd}
-                      onAddTodo={addTodo}
-                      filters={taskFilters}
-                      onFilterChange={(newFilters: TaskFiltersState) => setTaskFilters(newFilters)}
-                      availableLabels={allLabels}
-                    />
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Left side - Task List */}
+                      <div className="space-y-4">
+                        <motion.button
+                          onClick={() => setIsFormVisible(true)}
+                          className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                        >
+                          <span className="text-xl">+</span>
+                          <span>Add New Task</span>
+                        </motion.button>
+
+                        {isFormVisible ? (
+                          <TaskForm
+                            onSubmit={addTodo}
+                            onCancel={() => setIsFormVisible(false)}
+                          />
+                        ) : (
+                          <TaskList
+                            tasks={filteredListTodos}
+                            onToggle={toggleTodo}
+                            onDelete={deleteTodo}
+                            onEdit={updateTodo}
+                            onDragEnd={onDragEnd}
+                            onAddTodo={addTodo}
+                            filters={taskFilters}
+                            onFilterChange={setTaskFilters}
+                            availableLabels={allLabels}
+                          />
+                        )}
+                      </div>
+
+                      {/* Right side - Calendar */}
+                      <div>
+                        <Calendar
+                          tasks={filteredCalendarTodos}
+                          onTaskClick={(task) => setEditingTodo(task)}
+                          onToggle={toggleTodo}
+                          onDelete={deleteTodo}
+                          onEdit={updateTodo}
+                        />
+                      </div>
+                    </div>
                   </motion.div>
                 )}
                 
                 {activeTab === 'goals' && (
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4 }}
+                    key="goals"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.2 }}
                   >
                     <Goals userId={user?.uid || ''} todos={todos} />
                   </motion.div>
@@ -488,9 +681,11 @@ export default function DashboardPage() {
 
                 {activeTab === 'analytics' && (
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4 }}
+                    key="analytics"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.2 }}
                   >
                     <AnalyticsDashboard
                       todos={todos}
@@ -507,21 +702,55 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Task Creation Button */}
-      {activeTab === 'dashboard' && (
-        <motion.button
-          onClick={() => setActiveTab('dashboard')}
-          className={`fixed bottom-8 right-8 p-4 rounded-full shadow-lg ${
-            activeTab === 'dashboard'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-600'
-          }`}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <span className="text-2xl">+</span>
-        </motion.button>
-      )}
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 left-4 space-y-2 z-50">
+        <AnimatePresence>
+          {toasts.map(toast => (
+            <Toast
+              key={toast.id}
+              message={toast.message}
+              type={toast.type}
+              onUndo={toast.undoAction}
+              onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Add Settings Modal */}
+      <AnimatePresence>
+        {showSettings && (
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={(e) => {
+              // Close modal when clicking the backdrop
+              if (e.target === e.currentTarget) {
+                setShowSettings(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-gray-50 rounded-2xl w-full max-w-2xl mx-4"
+            >
+              <div className="p-6 flex justify-between items-center border-b border-gray-200">
+                <h2 className="text-2xl font-bold">Settings</h2>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 80px)' }}>
+                <Settings user={user} />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 } 

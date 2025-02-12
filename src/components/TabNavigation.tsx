@@ -1,14 +1,14 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 
-export type TabId = 'dashboard' | 'goals' | 'analytics' | 'about';
+export type TabId = 'dashboard' | 'goals' | 'analytics';
 
 export const tabs: { id: TabId; name: string; href: string }[] = [
-  { id: 'dashboard', name: 'Dashboard', href: '/dashboard' },
+  { id: 'dashboard', name: 'Tasks', href: '/dashboard' },
   { id: 'goals', name: 'Goals', href: '/goals' },
-  { id: 'analytics', name: 'Analytics', href: '/analytics' },
-  { id: 'about', name: 'About', href: '/about' },
+  { id: 'analytics', name: 'Analytics', href: '/analytics' }
 ];
 
 export interface TabNavigationProps {
@@ -19,7 +19,7 @@ export interface TabNavigationProps {
 export default function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="grid grid-cols-4 divide-x divide-gray-100">
+      <div className="grid grid-cols-3 divide-x divide-gray-100">
         {tabs.map((tab) => (
           <motion.button
             key={tab.id}

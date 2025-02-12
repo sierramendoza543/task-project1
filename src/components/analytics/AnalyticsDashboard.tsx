@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import type { Todo } from '@/types/todo';
 import DateRangeFilter from '@/components/DateRangeFilter';
+import CompletionStats from './CompletionStats';
 
 interface AnalyticsDashboardProps {
   todos: Todo[];
@@ -36,7 +37,10 @@ export default function AnalyticsDashboard({
   analytics 
 }: AnalyticsDashboardProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Add CompletionStats at the top */}
+      <CompletionStats todos={todos} />
+
       {/* Controls */}
       <div className="flex justify-between items-center">
         <DateRangeFilter

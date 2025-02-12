@@ -10,6 +10,7 @@ export interface Todo {
   status: TodoStatus;
   priority: TodoPriority;
   dueDate?: Date;
+  dueTime?: string;
   createdAt: Date;
   updatedAt: Date;
   userId: string;
@@ -30,6 +31,17 @@ export interface FirestoreTodo {
   order: number;
   priority: 'low' | 'medium' | 'high';
   dueDate?: Timestamp;
+  dueTime?: string;
 }
 
-export type NewTodo = Omit<Todo, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'order'>; 
+export type NewTodo = Omit<Todo, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'order'>;
+
+export type TaskSortOption = 'dueDate-asc' | 'dueDate-desc';
+
+export interface TaskFiltersState {
+  labels: TaskLabel[];
+  priority: string;
+  search: string;
+  showCompleted: boolean;
+  sort: TaskSortOption;
+} 

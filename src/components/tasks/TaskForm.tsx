@@ -17,14 +17,17 @@ export default function TaskForm({ onSubmit, onCancel, initialData, isEditing }:
     description: initialData?.description || '',
     priority: initialData?.priority || 'medium',
     dueDate: initialData?.dueDate ? new Date(initialData.dueDate).toISOString().split('T')[0] : '',
+    dueTime: initialData?.dueTime || '',
     labels: initialData?.labels || []
   });
+  const [includeTime, setIncludeTime] = useState(!!initialData?.dueTime);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
       ...formData,
-      dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined
+      dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
+      dueTime: formData.dueTime || undefined
     });
   };
 
@@ -56,13 +59,21 @@ export default function TaskForm({ onSubmit, onCancel, initialData, isEditing }:
 
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1 font-dm">Due Date</label>
-              <input
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 font-dm"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1 font-dm">Due Date & Time</label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={formData.dueDate}
+                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                  className="flex-1 px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 font-dm"
+                />
+                <input
+                  type="time"
+                  value={formData.dueTime}
+                  onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                  className="w-32 px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 font-dm"
+                />
+              </div>
             </div>
 
             <div className="flex-1">

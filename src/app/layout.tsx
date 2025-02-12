@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
+import Footer from "@/components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +28,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: "Task Project",
-  description: "Manage your tasks efficiently",
+  description: "A modern task management application",
 };
 
 export default function RootLayout({
@@ -37,9 +38,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${poppins.variable} font-sans antialiased`} suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${poppins.variable} font-sans antialiased flex flex-col min-h-screen`} suppressHydrationWarning>
         <ClientLayout>
-          {children}
+          <main className="flex-grow">
+            {children}
+          </main>
+          <Footer />
         </ClientLayout>
       </body>
     </html>
