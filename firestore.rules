@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Helper function to check if user has access to shared goal
+    function hasAccess(goalData) {
+      return isOwner(goalData.userId) || 
+        (goalData.sharedWith != null && 
+         goalData.sharedWith.hasAny([{'email': request.auth.token.email}]));
+    }
+
+    // Existing todos rules
+    match /todos/{todoId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // New goals rules
+    match /goals/{goalId} {
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        hasAccess(resource.data)
+      );
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.userId) || 
+        (hasAccess(resource.data) && 
+         resource.data.sharedWith[request.auth.token.email].role == 'editor')
+      );
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
