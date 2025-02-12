@@ -2,13 +2,14 @@
 
 import { motion } from 'framer-motion';
 
-export type TabId = 'tasks' | 'goals' | 'analytics';
+export type TabId = 'dashboard' | 'goals' | 'analytics' | 'about';
 
-interface Tab {
-  id: TabId;
-  label: string;
-  icon: string;
-}
+export const tabs: { id: TabId; name: string; href: string }[] = [
+  { id: 'dashboard', name: 'Dashboard', href: '/dashboard' },
+  { id: 'goals', name: 'Goals', href: '/goals' },
+  { id: 'analytics', name: 'Analytics', href: '/analytics' },
+  { id: 'about', name: 'About', href: '/about' },
+];
 
 export interface TabNavigationProps {
   activeTab: TabId;
@@ -16,15 +17,9 @@ export interface TabNavigationProps {
 }
 
 export default function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
-  const tabs: Tab[] = [
-    { id: 'tasks', label: 'Tasks', icon: '✓' },
-    { id: 'goals', label: 'Goals', icon: '🎯' },
-    { id: 'analytics', label: 'Analytics', icon: '📊' }
-  ];
-
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="grid grid-cols-3 divide-x divide-gray-100">
+      <div className="grid grid-cols-4 divide-x divide-gray-100">
         {tabs.map((tab) => (
           <motion.button
             key={tab.id}
@@ -39,8 +34,7 @@ export default function TabNavigation({ activeTab, onTabChange }: TabNavigationP
             whileTap={{ scale: 0.95 }}
           >
             <div className="flex flex-col items-center gap-2">
-              <span className="text-xl">{tab.icon}</span>
-              <span className="font-dm text-sm">{tab.label}</span>
+              <span className="text-xl">{tab.name}</span>
             </div>
             {activeTab === tab.id && (
               <motion.div
