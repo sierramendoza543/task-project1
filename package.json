@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy": "npm run build && firebase deploy",
+    "export": "next export"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
