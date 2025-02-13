@@ -112,12 +112,12 @@ export default function About() {
                   transition={{ type: "spring", stiffness: 300 }}
                 >
                   <Link
-                    href="https://github.com/sierramendoza543"
+                    href="https://www.linkedin.com/in/sierra-mendoza/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-indigo-600 hover:text-indigo-700 font-medium inline-flex items-center gap-2"
                   >
-                    <span>View More Projects</span>
+                    <span>View her LinkedIn Profile</span>
                     <motion.span
                       initial={{ x: 0 }}
                       whileHover={{ x: 5 }}
