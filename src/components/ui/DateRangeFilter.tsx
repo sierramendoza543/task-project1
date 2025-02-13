@@ -4,21 +4,20 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar } from 'lucide-react';
 
-interface DateRangeFilterProps {
-  startDate: Date;
-  endDate: Date;
-  onDateChange: (start: Date, end: Date) => void;
+export interface DateRangeFilterProps {
+  dateRange: { start: Date; end: Date };
+  onDateRangeChange: (range: { start: Date; end: Date }) => void;
 }
 
-export default function DateRangeFilter({ startDate, endDate, onDateChange }: DateRangeFilterProps) {
+export function DateRangeFilter({ dateRange, onDateRangeChange }: DateRangeFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleDateChange = (type: 'start' | 'end', date: string) => {
     const newDate = new Date(date);
     if (type === 'start') {
-      onDateChange(newDate, endDate);
+      onDateRangeChange({ start: newDate, end: dateRange.end });
     } else {
-      onDateChange(startDate, newDate);
+      onDateRangeChange({ start: dateRange.start, end: newDate });
     }
   };
 
@@ -45,7 +44,7 @@ export default function DateRangeFilter({ startDate, endDate, onDateChange }: Da
               </label>
               <input
                 type="date"
-                value={startDate.toISOString().split('T')[0]}
+                value={dateRange.start.toISOString().split('T')[0]}
                 onChange={(e) => handleDateChange('start', e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -56,7 +55,7 @@ export default function DateRangeFilter({ startDate, endDate, onDateChange }: Da
               </label>
               <input
                 type="date"
-                value={endDate.toISOString().split('T')[0]}
+                value={dateRange.end.toISOString().split('T')[0]}
                 onChange={(e) => handleDateChange('end', e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -66,4 +65,7 @@ export default function DateRangeFilter({ startDate, endDate, onDateChange }: Da
       )}
     </div>
   );
-} 
+}
+
+// Default export for backward compatibility
+export default DateRangeFilter; 

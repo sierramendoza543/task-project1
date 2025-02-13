@@ -5,6 +5,7 @@ export type GoalPriority = 'low' | 'medium' | 'high';
 
 export interface SharedUser {
   email: string;
+  addedAt: Timestamp;
 }
 
 export interface FirestoreGoal {
@@ -63,4 +64,21 @@ export interface FirestoreMilestone {
   goalId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export interface GoalData {
+  id: string;
+  title: string;
+  description: string;
+  targetTasks: number;
+  progress: number;
+  status: 'in-progress' | 'completed';
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  userId: string;
+  priority: GoalPriority;
+  targetDate: Timestamp;
+  tags: string[];
+  sharedWith?: SharedUser[];
+  ownerEmail: string;
 } 

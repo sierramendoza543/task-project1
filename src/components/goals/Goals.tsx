@@ -22,7 +22,14 @@ import {
   getDocs,
   writeBatch
 } from 'firebase/firestore';
-import type { Goal, GoalStatus, GoalPriority, FirestoreGoal, SharedUser } from '@/types/goals';
+import type { 
+  Goal, 
+  GoalStatus, 
+  GoalPriority, 
+  FirestoreGoal, 
+  SharedUser,
+  GoalData 
+} from '@/types/goals';
 import type { Todo } from '@/types/todo';
 import TagInput from '../ui/TagInput';
 import GoalStats from './GoalStats';
@@ -78,24 +85,6 @@ interface GoalProgress {
   percentage: number;
 }
 
-interface GoalData {
-  id: string;
-  title: string;
-  description: string;
-  targetTasks: number;
-  progress: number;
-  status: 'in-progress' | 'completed';
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  userId: string;
-}
-
-// Add this type for better tracking of shared users
-interface SharedUser {
-  email: string;
-  addedAt: Timestamp;
-}
-
 export default function Goals({ userId, todos }: GoalsProps) {
   const [activeTab, setActiveTab] = useState<'personal' | 'shared'>('personal');
   const [goals, setGoals] = useState<GoalData[]>([]);
@@ -131,13 +120,12 @@ export default function Goals({ userId, todos }: GoalsProps) {
     message: string;
   } | null>(null);
 
-  const addToast = (message: string, type: 'success' | 'error' | 'info', undoAction?: () => void) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts(prev => [...prev, { id, message, type, undoAction }]);
-    
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 5000);
+  const addToast = (message: string, type: 'success' | 'error' | 'info') => {
+    setToasts(prev => [...prev, { 
+      id: Date.now().toString(), 
+      message, 
+      type 
+    }]);
   };
 
   // Fetch goals
@@ -277,11 +265,11 @@ export default function Goals({ userId, todos }: GoalsProps) {
     setEditingGoal(goal);
     setNewGoal({
       title: goal.title,
-      description: goal.description || '',
+      description: goal.description,
       targetDate: goal.targetDate.toDate(),
       priority: goal.priority,
       tags: goal.tags,
-      targetTasks: goal.targetTasks || 1,
+      targetTasks: goal.targetTasks
     });
     setShowEditGoal(true);
   };
@@ -331,13 +319,7 @@ export default function Goals({ userId, todos }: GoalsProps) {
       setEditingGoal(null);
       setNewGoal(initialGoalState);
 
-      addToast('Goal updated successfully!', 'success', async () => {
-        try {
-          await updateDoc(goalRef, oldGoal);
-        } catch (error) {
-          console.error('Failed to undo:', error);
-        }
-      });
+      addToast('Goal updated successfully!', 'success');
     } catch (error) {
       console.error(error);
       addToast('Failed to update goal', 'error');
@@ -345,13 +327,21 @@ export default function Goals({ userId, todos }: GoalsProps) {
   };
 
   // Convert Firestore data to Goal type
-  const convertGoalData = (data: GoalData, id: string): GoalData => ({
-    ...data,
+  const convertGoalData = (data: FirestoreGoal, id: string): GoalData => ({
     id,
+    title: data.title,
+    description: data.description || '',
+    targetTasks: data.targetTasks,
+    progress: data.progress,
+    status: data.status === 'cancelled' ? 'in-progress' : data.status,
     createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    userId: data.userId,
+    priority: data.priority,
     targetDate: data.targetDate,
-    sharedWith: data.sharedWith || [],
-    ownerEmail: data.ownerEmail || auth.currentUser?.email || ''
+    tags: data.tags,
+    sharedWith: data.sharedWith,
+    ownerEmail: data.ownerEmail
   });
 
   // Handle sharing a goal
@@ -427,10 +417,7 @@ export default function Goals({ userId, todos }: GoalsProps) {
       addToast('You have left the goal', 'success');
     } catch (error) {
       console.error('Error leaving goal:', error);
-      addToast({
-        message: 'Failed to leave goal',
-        type: 'error'
-      });
+      addToast('Failed to leave goal', 'error');
     }
   };
 
@@ -440,7 +427,7 @@ export default function Goals({ userId, todos }: GoalsProps) {
     
     return goalsToFilter.filter(goal => {
       const matchesSearch = goal.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (goal.description?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+        goal.description.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesPriority = selectedPriority === 'all' || goal.priority === selectedPriority;
       
@@ -526,10 +513,7 @@ export default function Goals({ userId, todos }: GoalsProps) {
 
           // Show completion messages when a goal is newly completed
           if (wasNotCompleted && isNowCompleted) {
-            addToast({
-              message: `🎉 Goal Completed: ${goal.title}`,
-              type: 'success'
-            });
+            addToast(`🎉 Goal Completed: ${goal.title}`, 'success');
 
             setAlertModal({
               isOpen: true,
@@ -593,7 +577,7 @@ export default function Goals({ userId, todos }: GoalsProps) {
         personalCount={personalGoals.length}
         sharedCount={sharedGoals.length}
       />
-      <GoalStats goals={goals} />
+      <GoalStats goals={goals as GoalData[]} />
 
       {/* Add New Goal Button */}
       {activeTab === 'personal' && (

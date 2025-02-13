@@ -1,9 +1,17 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import { 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  serverTimestamp 
+} from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import Toast from '@/components/shared/Toast';
 import AlertModal from '@/components/shared/AlertModal';
+import { Todo } from '@/types/todo';
+import { addToast } from '@/utils/toast';
 
 const handleToggle = async (todoId: string, completed: boolean) => {
   try {

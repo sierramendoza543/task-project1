@@ -4,14 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Info, X } from 'lucide-react';
 
 interface ToastProps {
-  id: string;
   message: string;
   type: 'success' | 'error' | 'info';
-  onDismiss: (id: string) => void;
-  undoAction?: () => void;
+  onClose: () => void;
+  onUndo?: () => void;
 }
 
-export default function Toast({ id, message, type, onDismiss, undoAction }: ToastProps) {
+export default function Toast({ message, type, onClose, onUndo }: ToastProps) {
   const icons = {
     success: <CheckCircle className="w-5 h-5 text-green-500" />,
     error: <XCircle className="w-5 h-5 text-red-500" />,
@@ -36,16 +35,16 @@ export default function Toast({ id, message, type, onDismiss, undoAction }: Toas
         <span className="text-gray-700">{message}</span>
       </div>
       <div className="flex items-center gap-2">
-        {undoAction && (
+        {onUndo && (
           <button
-            onClick={undoAction}
+            onClick={onUndo}
             className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
           >
             Undo
           </button>
         )}
         <button
-          onClick={() => onDismiss(id)}
+          onClick={onClose}
           className="text-gray-400 hover:text-gray-600"
         >
           <X className="w-5 h-5" />

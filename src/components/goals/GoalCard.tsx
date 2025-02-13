@@ -2,24 +2,15 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import type { Goal } from '@/types/goals';
+import type { GoalData } from '@/types/goals';
 import ShareGoalDialog from './ShareGoalDialog';
 import { Timestamp } from 'firebase/firestore';
-import { auth } from '@/firebase/firebaseConfig';
+import { auth } from '@/config/firebase';
+import { formatTimestamp } from '@/utils/dates';
 
 interface GoalCardProps {
-  goal: {
-    id: string;
-    title: string;
-    description: string;
-    targetTasks: number;
-    progress: number;
-    status: 'in-progress' | 'completed';
-    createdAt: Timestamp;
-    sharedWith?: { email: string }[];
-    userId: string;
-  };
-  onEdit: (goal: Goal) => void;
+  goal: GoalData;
+  onEdit: (goal: GoalData) => void;
   onDelete: (goalId: string) => Promise<void>;
   onProgressChange: (goalId: string, progress: number) => Promise<void>;
   onShare: (goalId: string) => Promise<void>;
@@ -37,11 +28,22 @@ export default function GoalCard({
   onLeave
 }: GoalCardProps) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const isShared = goal.sharedWith?.length > 0;
+  const isShared = (goal.sharedWith?.length ?? 0) > 0;
   const currentUserEmail = auth.currentUser?.email;
   const isOwner = goal.userId === auth.currentUser?.uid;
 
   const percentage = Math.min(Math.round((goal.progress || 0) / goal.targetTasks * 100), 100);
+
+  const getStatusColor = (status: 'in-progress' | 'completed') => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in-progress':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   return (
     <>
@@ -73,11 +75,7 @@ export default function GoalCard({
               </motion.span>
               <motion.span
                 whileHover={{ scale: 1.05 }}
-                className={`px-3 py-1 rounded-full text-sm font-dm ${
-                  goal.status === 'completed' ? 'bg-green-100 text-green-800' :
-                  goal.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                  'bg-blue-100 text-blue-800'
-                }`}
+                className={getStatusColor(goal.status as 'in-progress' | 'completed')}
               >
                 {goal.status}
               </motion.span>
@@ -103,7 +101,7 @@ export default function GoalCard({
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => onEdit(goal as Goal)}
+                  onClick={() => onEdit(goal)}
                   className="p-2 text-gray-500 hover:text-indigo-600 rounded-full hover:bg-indigo-50 transition-colors"
                 >
                   ✏️
@@ -130,7 +128,7 @@ export default function GoalCard({
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => onEdit(goal as Goal)}
+                  onClick={() => onEdit(goal)}
                   className="p-2 text-gray-500 hover:text-indigo-600 rounded-full hover:bg-indigo-50 transition-colors"
                 >
                   ✏️
@@ -190,7 +188,7 @@ export default function GoalCard({
 
         {/* Due Date */}
         <div className="mt-4 text-sm text-gray-500 font-dm">
-          Due: {goal.targetDate.toLocaleDateString()}
+          Due: {formatTimestamp(goal.targetDate)}
         </div>
 
         {goal.status === 'completed' && (
@@ -203,9 +201,12 @@ export default function GoalCard({
       <ShareGoalDialog
         isOpen={isShareDialogOpen}
         onClose={() => setIsShareDialogOpen(false)}
-        onShare={async (email) => await onShare(goal.id)}
+        onShare={onShare}
+        onLeave={() => onLeave(goal.id)}
         currentSharedWith={goal.sharedWith || []}
-        onRemoveShare={async (email) => await onRemoveShare(goal.id, email)}
+        isOwner={isOwner}
+        ownerEmail={goal.ownerEmail}
+        goalId={goal.id}
       />
     </>
   );

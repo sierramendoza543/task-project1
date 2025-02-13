@@ -2,18 +2,15 @@
 
 import { motion } from 'framer-motion';
 import type { Todo } from '@/types/todo';
-import DateRangeFilter from '@/components/ui/DateRangeFilter';
+import DateRangeFilter, { DateRangeFilterProps } from '../ui/DateRangeFilter';
 import CompletionStats from './CompletionStats';
 import CircularProgress from '../ui/CircularProgress';
 import 'react-circular-progressbar/dist/styles.css';
 
 interface AnalyticsDashboardProps {
   todos: Todo[];
-  dateRange: {
-    start: Date;
-    end: Date;
-  };
-  onDateRangeChange: (range: { start: Date; end: Date }) => void;
+  dateRange: DateRangeFilterProps['dateRange'];
+  onDateRangeChange: DateRangeFilterProps['onDateRangeChange'];
   onExport: () => void;
   analytics: {
     completionRate: number;

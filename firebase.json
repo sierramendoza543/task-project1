@@ -1,6 +1,5 @@
 {
   "hosting": {
-    "target": "task-project-123",
     "public": "out",
     "ignore": [
       "firebase.json",
@@ -9,14 +8,19 @@
     ],
     "rewrites": [
       {
-        "source": "/.well-known/**",
-        "destination": "/.well-known/**"
+        "source": "/",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/dashboard{,/**}",
+        "destination": "/dashboard.html"
       },
       {
         "source": "**",
         "destination": "/index.html"
       }
-    ]
+    ],
+    "cleanUrls": true
   },
   "firestore": {
     "rules": "firestore.rules",

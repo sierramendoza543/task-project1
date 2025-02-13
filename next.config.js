@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Remove or comment out the output: 'export' line if you're using middleware
-  // output: 'export',
+  output: 'export',
   images: {
     unoptimized: true,
   },

@@ -37,6 +37,7 @@ import Toast from '@/components/shared/Toast';
 import Settings from '@/components/settings/Settings';
 import { Settings2 } from 'lucide-react';
 import { AuthUser } from '@/types/user';
+import { isInDateRange, timestampToDate } from '@/utils/dates';
 
 interface EditingTodo {
   id: string;
@@ -78,10 +79,11 @@ const getLastNDays = (n: number) => {
   return result;
 };
 
-const isSameDay = (date1: Date, date2: Date) => {
-  return date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate();
+const isSameDay = (timestamp: Timestamp, date: Date) => {
+  const timestampDate = timestampToDate(timestamp);
+  return timestampDate.getFullYear() === date.getFullYear() &&
+    timestampDate.getMonth() === date.getMonth() &&
+    timestampDate.getDate() === date.getDate();
 };
 
 // Add this function at the top of your component or in a utils file
@@ -278,10 +280,12 @@ export default function DashboardPage() {
   const analytics = {
     // Task completion rate
     completionRate: (todos: Todo[]) => {
-      const filtered = todos.filter(todo => 
-        todo.createdAt >= dateRange.start && 
-        todo.createdAt <= dateRange.end
-      );
+      const filtered = todos.filter(todo => {
+        const todoMillis = todo.createdAt.toMillis();
+        const startMillis = dateRange.start.getTime();
+        const endMillis = dateRange.end.getTime();
+        return todoMillis >= startMillis && todoMillis <= endMillis;
+      });
       if (filtered.length === 0) return 0;
       return (filtered.filter(todo => todo.completed).length / filtered.length) * 100;
     },
@@ -524,54 +528,23 @@ export default function DashboardPage() {
     setError('');
   };
 
-  // This one for the task list (excluding completed tasks by default)
-  const filteredListTodos = todos
-    .filter(todo => {
-      // Hide completed tasks unless showCompleted is true
-      if (todo.completed && !taskFilters.showCompleted) return false;
-      
-      // Apply other filters
-      if (taskFilters.priority !== 'all' && todo.priority !== taskFilters.priority) return false;
-      if (taskFilters.search && !todo.title.toLowerCase().includes(taskFilters.search.toLowerCase())) return false;
-      if (taskFilters.labels.length > 0 && !taskFilters.labels.every((label: TaskLabel) => todo.labels?.includes(label))) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      // First sort by completion status (completed tasks always at bottom if shown)
-      if (a.completed !== b.completed) {
-        return a.completed ? 1 : -1;
-      }
-      
-      // Then sort by due date if both tasks have due dates
-      if (a.dueDate && b.dueDate) {
-        const dateA = new Date(a.dueDate).getTime();
-        const dateB = new Date(b.dueDate).getTime();
-        
-        // Consider time if available
-        if (a.dueTime && b.dueTime) {
-          const timeA = new Date(`${a.dueDate.toDateString()} ${a.dueTime}`).getTime();
-          const timeB = new Date(`${b.dueDate.toDateString()} ${b.dueTime}`).getTime();
-          return taskFilters.sort === 'dueDate-asc' ? timeA - timeB : timeB - timeA;
-        }
-        
-        return taskFilters.sort === 'dueDate-asc' ? dateA - dateB : dateB - dateA;
-      }
-      
-      // If only one task has a due date, it should come first
-      if (a.dueDate) return -1;
-      if (b.dueDate) return 1;
-      
-      // If neither has a due date, sort by title
-      return a.title.localeCompare(b.title);
-    });
+  // Update the filtering logic to use toMillis() for comparison
+  const filteredTodos = todos.filter(todo => {
+    const todoMillis = todo.createdAt.toMillis();
+    const startMillis = dateRange.start.getTime();
+    const endMillis = dateRange.end.getTime();
+    return todoMillis >= startMillis && todoMillis <= endMillis;
+  });
 
-  // This one for the calendar (including completed tasks)
+  // Update the calendar filtering to also use isInDateRange
   const filteredCalendarTodos = todos.filter(todo => {
-    // Apply filters except completion status (handled in Calendar component)
-    if (taskFilters.priority !== 'all' && todo.priority !== taskFilters.priority) return false;
-    if (taskFilters.search && !todo.title.toLowerCase().includes(taskFilters.search.toLowerCase())) return false;
-    if (taskFilters.labels.length > 0 && !taskFilters.labels.every((label: TaskLabel) => todo.labels?.includes(label))) return false;
-    return true;
+    const matchesDateRange = isInDateRange(todo.createdAt, dateRange);
+    const matchesSearch = todo.title.toLowerCase().includes(filter.search.toLowerCase());
+    const matchesPriority = filter.priority === 'all' || todo.priority === filter.priority;
+    const matchesLabels = filter.labels.length === 0 || 
+      filter.labels.every(label => todo.labels?.includes(label));
+
+    return matchesDateRange && matchesSearch && matchesPriority && matchesLabels;
   });
 
   const handleExport = () => {
@@ -663,7 +636,7 @@ export default function DashboardPage() {
                           />
                         ) : (
                     <TaskList
-                            tasks={filteredListTodos}
+                            tasks={filteredTodos}
                       onToggle={toggleTodo}
                       onDelete={deleteTodo}
                             onEdit={updateTodo}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Todo } from '@/types/todo';
+import { timestampToDate } from '@/utils/dates';
 
 interface CompletionStatsProps {
   todos: Todo[];
@@ -36,7 +37,7 @@ export default function CompletionStats({ todos }: CompletionStatsProps) {
 
     return todos.filter(todo => {
       if (!todo.completed) return false;
-      const completedDate = new Date(todo.updatedAt);
+      const completedDate = timestampToDate(todo.updatedAt);
       return completedDate >= startDate && completedDate <= now;
     }).length;
   };

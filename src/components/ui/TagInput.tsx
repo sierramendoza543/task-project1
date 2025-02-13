@@ -7,6 +7,7 @@ import { X } from 'lucide-react';
 interface TagInputProps {
   tags: string[];
   onTagsChange: (tags: string[]) => void;
+  suggestedTags?: string[];
   placeholder?: string;
   maxTags?: number;
 }
@@ -14,6 +15,7 @@ interface TagInputProps {
 export default function TagInput({ 
   tags, 
   onTagsChange, 
+  suggestedTags,
   placeholder = "Add tags...",
   maxTags = 5 
 }: TagInputProps) {

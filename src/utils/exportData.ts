@@ -1,9 +1,9 @@
 import { Todo } from '@/types/todo';
+import { isInDateRange, formatTimestamp } from '@/utils/dates';
 
 export const exportToCSV = (todos: Todo[], dateRange: { start: Date; end: Date }) => {
   const filteredTodos = todos.filter(todo => 
-    todo.createdAt >= dateRange.start && 
-    todo.createdAt <= dateRange.end
+    isInDateRange(todo.createdAt, dateRange)
   );
 
   const headers = [
@@ -21,7 +21,7 @@ export const exportToCSV = (todos: Todo[], dateRange: { start: Date; end: Date }
     todo.description || '',
     todo.completed ? 'Completed' : 'Active',
     todo.priority,
-    todo.createdAt.toLocaleDateString(),
+    formatTimestamp(todo.createdAt),
     todo.dueDate ? todo.dueDate.toLocaleDateString() : '',
     todo.labels?.join(', ') || ''
   ]);

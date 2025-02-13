@@ -1,8 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import type { Goal } from '@/types/goals';
+import type { GoalData } from '@/types/goals';
 import { Timestamp } from 'firebase/firestore';
+import { isInDateRange, timestampToDate } from '@/utils/dates';
 
 interface StatCardProps {
   icon: string;
@@ -31,12 +32,7 @@ function StatCard({ icon, label, value, bgColor }: StatCardProps) {
 }
 
 interface GoalStatsProps {
-  goals: Array<{
-    id: string;
-    status: string;
-    targetDate: Timestamp;
-    priority: string;
-  }>;
+  goals: GoalData[];
 }
 
 export default function GoalStats({ goals }: GoalStatsProps) {
@@ -59,9 +55,10 @@ export default function GoalStats({ goals }: GoalStatsProps) {
     {
       label: 'Due Soon',
       value: goals.filter(g => {
-        // Convert Firestore Timestamp to Date
-        const targetDate = g.targetDate.toDate();
-        const daysUntilDue = Math.ceil((targetDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        const daysUntilDue = Math.ceil(
+          (timestampToDate(g.targetDate).getTime() - new Date().getTime()) / 
+          (1000 * 60 * 60 * 24)
+        );
         return daysUntilDue <= 7 && daysUntilDue > 0 && g.status === 'in-progress';
       }).length,
       bgColor: 'bg-yellow-100'
