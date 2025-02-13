@@ -17,10 +17,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
+  // Redirect /settings to /dashboard/settings
+  if (pathname === '/settings') {
+    return NextResponse.redirect(new URL('/dashboard/settings', request.url));
+  }
+
   return NextResponse.next();
 }
 
 // Configure which routes should be handled by the middleware
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/signup']
+  matcher: ['/dashboard/:path*', '/login', '/signup', '/settings']
 }; 

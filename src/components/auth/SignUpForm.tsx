@@ -28,7 +28,16 @@ export default function SignUpForm() {
     setLocalLoading(true);
 
     try {
-      const { confirmPassword, ...signUpData } = formData;
+      const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+      
+      const signUpData = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        displayName: fullName
+      };
+
       await signUp(signUpData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign up');

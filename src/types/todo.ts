@@ -11,12 +11,13 @@ export interface Todo {
   priority: TodoPriority;
   dueDate?: Date;
   dueTime?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
   userId: string;
   labels?: string[];
-  completed?: boolean;
-  order?: number;
+  completed: boolean;
+  order: number;
+  goalId?: string;
 }
 
 export type TaskLabel = string;
@@ -32,6 +33,7 @@ export interface FirestoreTodo {
   priority: 'low' | 'medium' | 'high';
   dueDate?: Timestamp;
   dueTime?: string;
+  goalId?: string;
 }
 
 export type NewTodo = Omit<Todo, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'order'>;

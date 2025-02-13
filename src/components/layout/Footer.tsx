@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Github } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -29,6 +30,17 @@ export default function Footer() {
               <li>
                 <Link href="/signup" className="hover:text-white transition-colors">
                   Sign Up
+                </Link>
+              </li>
+              <li>
+                <Link 
+                  href="https://github.com/sierramendoza543/task-project1"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-white transition-colors flex items-center gap-2"
+                >
+                  <Github className="w-4 h-4" />
+                  <span>GitHub</span>
                 </Link>
               </li>
             </ul>

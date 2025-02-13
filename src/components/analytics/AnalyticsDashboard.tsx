@@ -2,8 +2,10 @@
 
 import { motion } from 'framer-motion';
 import type { Todo } from '@/types/todo';
-import DateRangeFilter from '@/components/DateRangeFilter';
+import DateRangeFilter from '@/components/ui/DateRangeFilter';
 import CompletionStats from './CompletionStats';
+import CircularProgress from '../ui/CircularProgress';
+import 'react-circular-progressbar/dist/styles.css';
 
 interface AnalyticsDashboardProps {
   todos: Todo[];
@@ -14,7 +16,7 @@ interface AnalyticsDashboardProps {
   onDateRangeChange: (range: { start: Date; end: Date }) => void;
   onExport: () => void;
   analytics: {
-    completionRate: (todos: Todo[]) => number;
+    completionRate: number;
     priorityDistribution: {
       high: number;
       medium: number;
@@ -36,6 +38,11 @@ export default function AnalyticsDashboard({
   onExport,
   analytics 
 }: AnalyticsDashboardProps) {
+  const { completionRate, priorityDistribution, overdueTasks } = analytics;
+  const totalTasks = Object.values(priorityDistribution).reduce((a, b) => a + b, 0);
+  const overduePercentage = overdueTasks > 0 ? (overdueTasks / totalTasks) * 100 : 0;
+  const overdueCount = overdueTasks;
+
   return (
     <div className="space-y-6">
       {/* Add CompletionStats at the top */}
@@ -58,31 +65,63 @@ export default function AnalyticsDashboard({
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-        >
-          <h3 className="text-lg font-bold font-space mb-4">Completion Rate</h3>
-          <div className="text-3xl font-bold text-indigo-600">
-            {analytics.completionRate(todos)}%
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Completion Rate Card */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold mb-4">Completion Rate</h3>
+          <div className="flex items-center justify-center">
+            <CircularProgress
+              value={completionRate}
+              text={`${completionRate}%`}
+              pathColor="#4F46E5"
+              textColor="#4F46E5"
+              trailColor="#E0E7FF"
+            />
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-        >
-          <h3 className="text-lg font-bold font-space mb-4">Overdue Tasks</h3>
-          <div className="text-3xl font-bold text-red-600">
-            {analytics.overdueTasks}
+        {/* Overdue Tasks Card */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold mb-4">Overdue Tasks</h3>
+          <div className="flex items-center justify-center">
+            <CircularProgress
+              value={overduePercentage}
+              text={`${overdueCount}`}
+              pathColor="#EF4444"
+              textColor="#EF4444"
+              trailColor="#FEE2E2"
+            />
           </div>
-        </motion.div>
+        </div>
 
-        {/* ... Add other stat cards ... */}
+        {/* Priority Distribution Card */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold mb-4">Priority Distribution</h3>
+          <div className="space-y-4">
+            {Object.entries(priorityDistribution).map(([priority, count]) => (
+              <div key={priority}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="capitalize">{priority}</span>
+                  <span>{count}</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      priority === 'high'
+                        ? 'bg-red-500'
+                        : priority === 'medium'
+                        ? 'bg-yellow-500'
+                        : 'bg-green-500'
+                    }`}
+                    style={{
+                      width: `${(count / totalTasks) * 100}%`
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Weekly Activity Chart */}
@@ -105,30 +144,6 @@ export default function AnalyticsDashboard({
               <span className="text-xs mt-2 text-gray-600">
                 {day.date.toLocaleDateString(undefined, { weekday: 'short' })}
               </span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Priority Distribution */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-      >
-        <h3 className="text-lg font-bold font-space mb-6">Priority Distribution</h3>
-        <div className="grid grid-cols-3 gap-4">
-          {Object.entries(analytics.priorityDistribution).map(([priority, count]) => (
-            <div key={priority} className="text-center">
-              <div className={`text-3xl font-bold mb-2 ${
-                priority === 'high' ? 'text-red-600' :
-                priority === 'medium' ? 'text-yellow-600' :
-                'text-green-600'
-              }`}>
-                {count}
-              </div>
-              <div className="text-sm text-gray-600 font-dm capitalize">{priority}</div>
             </div>
           ))}
         </div>

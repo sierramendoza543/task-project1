@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import type { TaskLabel, TaskSortOption } from '@/types/todo';
+import type { TaskFiltersState } from '@/types/taskFilters';
+import type { TaskLabel } from '@/types/todo';
 
 interface TaskFiltersProps {
   filters: TaskFiltersState;
@@ -11,6 +12,15 @@ interface TaskFiltersProps {
 }
 
 export default function TaskFilters({ filters, onChange, availableLabels }: TaskFiltersProps) {
+  const handleLabelToggle = (label: TaskLabel) => {
+    onChange({
+      ...filters,
+      labels: filters.labels.includes(label)
+        ? filters.labels.filter((l: TaskLabel) => l !== label)
+        : [...filters.labels, label]
+    });
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
       <div className="flex flex-col gap-4">
@@ -30,7 +40,10 @@ export default function TaskFilters({ filters, onChange, availableLabels }: Task
           {/* Priority Filter */}
           <select
             value={filters.priority}
-            onChange={(e) => onChange({ ...filters, priority: e.target.value })}
+            onChange={(e) => onChange({ 
+              ...filters, 
+              priority: e.target.value as TaskFiltersState['priority']
+            })}
             className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 font-dm"
           >
             <option value="all">All Priorities</option>
@@ -42,7 +55,10 @@ export default function TaskFilters({ filters, onChange, availableLabels }: Task
           {/* Sort */}
           <select
             value={filters.sort}
-            onChange={(e) => onChange({ ...filters, sort: e.target.value as TaskSortOption })}
+            onChange={(e) => onChange({ 
+              ...filters, 
+              sort: e.target.value as TaskFiltersState['sort']
+            })}
             className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 font-dm"
           >
             <option value="dueDate-asc">Due Soon First</option>
@@ -57,12 +73,7 @@ export default function TaskFilters({ filters, onChange, availableLabels }: Task
               key={label}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                const newLabels = filters.labels.includes(label)
-                  ? filters.labels.filter(l => l !== label)
-                  : [...filters.labels, label];
-                onChange({ ...filters, labels: newLabels });
-              }}
+              onClick={() => handleLabelToggle(label)}
               className={`px-3 py-1 rounded-full text-sm font-dm transition-colors ${
                 filters.labels.includes(label)
                   ? 'bg-indigo-100 text-indigo-800'

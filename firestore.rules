@@ -11,39 +11,93 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Helper function to check if user has access to shared goal
+    // Simplified hasAccess function
     function hasAccess(goalData) {
       return isOwner(goalData.userId) || 
         (goalData.sharedWith != null && 
          goalData.sharedWith.hasAny([{'email': request.auth.token.email}]));
     }
 
-    // Existing todos rules
-    match /todos/{todoId} {
-      allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
-      allow update, delete: if isAuthenticated() && isOwner(resource.data.userId);
-    }
-
-    // New goals rules
+    // Goals rules
     match /goals/{goalId} {
+      // Helper functions
+      function isOwner() {
+        return resource.data.userId == request.auth.uid;
+      }
+
+      function isSharedWith() {
+        return resource.data.sharedWith.hasAny([{'email': request.auth.token.email}]);
+      }
+
+      // Helper to ensure sharedWith is preserved during updates
+      function preservesSharedWith() {
+        return (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sharedWith']) || 
+          request.resource.data.sharedWith == resource.data.sharedWith
+        );
+      }
+
+      // Allow read if:
+      // 1. User owns the goal OR
+      // 2. User's email is in sharedWith OR
+      // 3. User is checking if they have access (for notifications/updates)
       allow read: if isAuthenticated() && (
-        isOwner(resource.data.userId) || 
-        hasAccess(resource.data)
+        isOwner() ||
+        isSharedWith() ||
+        (request.auth != null && 
+         (resource == null || // Allow reading non-existent documents
+          resource.data.userId == request.auth.uid || 
+          (resource.data.sharedWith != null && 
+           resource.data.sharedWith.hasAny([{'email': request.auth.token.email}]))))
       );
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      
+      // Allow create if authenticated
+      allow create: if isAuthenticated();
+      
+      // Allow update if:
+      // 1. User owns the goal AND preserves sharedWith (unless explicitly modifying it) OR
+      // 2. User is in sharedWith AND preserves sharedWith OR
+      // 3. Document is being shared with the user
       allow update: if isAuthenticated() && (
-        isOwner(resource.data.userId) || 
-        (hasAccess(resource.data) && 
-         resource.data.sharedWith[request.auth.token.email].role == 'editor')
+        (isOwner() && preservesSharedWith()) ||
+        (isSharedWith() && preservesSharedWith()) ||
+        (
+          // Allow updates when sharing
+          request.resource.data.sharedWith != null &&
+          request.resource.data.sharedWith.hasAny([{'email': request.auth.token.email}])
+        )
       );
-      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      // Allow delete if owner
+      allow delete: if isAuthenticated() && isOwner();
+
+      // Allow creating new shared goals
+      allow create: if isAuthenticated() && (
+        // New document must have same data as source except for sharedWith
+        request.resource.data.keys().hasAll(resource.data.keys()) &&
+        request.resource.data.userId == resource.data.userId
+      );
     }
 
+    // Users rules
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
+      // Allow reading any user (needed for sharing)
+      allow read: if isAuthenticated();
+      
+      // Only allow users to modify their own profile
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Notifications collection rules (if you have one)
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Keep existing todos rules
+    match /todos/{todoId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
     }
   }
 }

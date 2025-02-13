@@ -2,15 +2,17 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/context/AuthContext';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import { AuthUser } from '@/types/user';
+import { auth } from '@/config/firebase';  // Import auth directly
 
 interface ChangePasswordModalProps {
+  user: AuthUser;
   onClose: () => void;
 }
 
-export default function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
-  const { user } = useAuth();
+export default function ChangePasswordModal({ user, onClose }: ChangePasswordModalProps) {
+  const currentUser = auth.currentUser;
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -21,34 +23,17 @@ export default function ChangePasswordModal({ onClose }: ChangePasswordModalProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    // Validate passwords match
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
-
-    // Validate password length
-    if (passwordData.newPassword.length < 6) {
-      setError('New password must be at least 6 characters long');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
+    
     try {
-      // First, reauthenticate the user
       const credential = EmailAuthProvider.credential(
-        user.email!,
+        user.email,
         passwordData.currentPassword
       );
       
-      await reauthenticateWithCredential(user, credential);
+      if (!currentUser) throw new Error('No user logged in');
       
-      // Then update the password
-      await updatePassword(user, passwordData.newPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, passwordData.newPassword);
       
       onClose();
     } catch (error: any) {

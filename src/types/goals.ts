@@ -5,8 +5,22 @@ export type GoalPriority = 'low' | 'medium' | 'high';
 
 export interface SharedUser {
   email: string;
-  role: 'viewer' | 'editor';
-  userId?: string;
+}
+
+export interface FirestoreGoal {
+  userId: string;
+  title: string;
+  description?: string;
+  status: GoalStatus;
+  priority: GoalPriority;
+  progress: number;
+  targetDate: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  tags: string[];
+  targetTasks: number;
+  sharedWith: SharedUser[];
+  ownerEmail: string;
 }
 
 export interface Goal {
@@ -14,31 +28,16 @@ export interface Goal {
   userId: string;
   title: string;
   description?: string;
+  status: GoalStatus;
+  priority: GoalPriority;
+  progress: number;
   targetDate: Date;
-  status: GoalStatus;
-  priority: GoalPriority;
-  progress: number;
   createdAt: Date;
-  updatedAt: Date;
-  relatedTodos: string[];
-  tags: string[];
-  sharedWith: SharedUser[];
-  sharedBy?: string;
-}
-
-export interface FirestoreGoal {
-  userId: string;
-  title: string;
-  description?: string;
-  targetDate: Timestamp;
-  status: GoalStatus;
-  priority: GoalPriority;
-  progress: number;
-  createdAt: Timestamp;
   updatedAt: Timestamp;
-  relatedTodos?: string[];
   tags: string[];
+  targetTasks: number;
   sharedWith: SharedUser[];
+  ownerEmail: string;
 }
 
 export type NewGoal = Omit<Goal, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'progress'>;

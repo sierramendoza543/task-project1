@@ -1,15 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // Remove or comment out the output: 'export' line if you're using middleware
+  // output: 'export',
   images: {
     unoptimized: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
-  },
-  output: 'export',
-  images: {
-    unoptimized: true,
   },
   async headers() {
     return [
@@ -31,6 +28,16 @@ const nextConfig = {
         ],
       },
     ];
+  },
+  pageExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        punycode: false,
+      };
+    }
+    return config;
   },
 }
 

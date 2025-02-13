@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import type { Goal } from '@/types/goals';
+import { Timestamp } from 'firebase/firestore';
 
 interface StatCardProps {
   icon: string;
@@ -30,34 +31,37 @@ function StatCard({ icon, label, value, bgColor }: StatCardProps) {
 }
 
 interface GoalStatsProps {
-  goals: Goal[];
+  goals: Array<{
+    id: string;
+    status: string;
+    targetDate: Timestamp;
+    priority: string;
+  }>;
 }
 
 export default function GoalStats({ goals }: GoalStatsProps) {
   const stats = [
     {
-      icon: '🎯',
       label: 'Total Goals',
       value: goals.length,
       bgColor: 'bg-indigo-100'
     },
     {
-      icon: '✅',
       label: 'Completed',
       value: goals.filter(g => g.status === 'completed').length,
       bgColor: 'bg-green-100'
     },
     {
-      icon: '🏃',
-      label: 'In Progress',
-      value: goals.filter(g => g.status === 'in-progress').length,
-      bgColor: 'bg-blue-100'
+      label: 'High Priority',
+      value: goals.filter(g => g.priority === 'high' && g.status === 'in-progress').length,
+      bgColor: 'bg-red-100'
     },
     {
-      icon: '⏳',
       label: 'Due Soon',
       value: goals.filter(g => {
-        const daysUntilDue = Math.ceil((g.targetDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        // Convert Firestore Timestamp to Date
+        const targetDate = g.targetDate.toDate();
+        const daysUntilDue = Math.ceil((targetDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
         return daysUntilDue <= 7 && daysUntilDue > 0 && g.status === 'in-progress';
       }).length,
       bgColor: 'bg-yellow-100'
@@ -72,8 +76,10 @@ export default function GoalStats({ goals }: GoalStatsProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.1 }}
+          className={`${stat.bgColor} rounded-xl p-4`}
         >
-          <StatCard {...stat} />
+          <div className="text-2xl font-bold mb-1">{stat.value}</div>
+          <div className="text-sm text-gray-600">{stat.label}</div>
         </motion.div>
       ))}
     </div>

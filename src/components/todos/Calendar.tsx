@@ -136,7 +136,7 @@ export default function Calendar({ tasks, onTaskClick, onToggle, onDelete, onEdi
                         key={task.id}
                         onClick={() => setPreviewTask(task)}
                         className={`w-full text-left text-xs p-2 rounded ${
-                          getPriorityStyles(task.priority, task.completed)
+                          getPriorityStyles(task.priority, task.completed || false)
                         }`}
                         whileHover={{ scale: 1.05 }}
                       >

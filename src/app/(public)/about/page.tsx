@@ -72,7 +72,7 @@ export default function About() {
               Welcome to Task Project! I created this platform to help streamline workflow 
               and make task management more intuitive. As a high-school student, I take 
               productivity and organization very seriously, 
-              and these values are illustrated throughout the platform.
+              and I created this platform to help others do the same.
               I wanted to build a tool that makes everyone's 
               work and personal life a little easier.
             </p>
@@ -125,12 +125,51 @@ export default function About() {
         variants={fadeInUp}
         transition={{ duration: 0.6, delay: 0.4 }}
       >
-        <p className="text-lg text-gray-700 text-center">
-          Task Project is designed to be simple yet powerful, helping individuals and teams 
-          stay organized and productive. Our platform combines intuitive design with powerful 
-          features to create the perfect task management solution.
-        </p>
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-l-4 border-indigo-500 p-6 rounded-lg shadow-sm">
+          <p className="text-lg text-gray-700 m-0">
+            Task Project is designed to be simple yet powerful, helping individuals and teams 
+            stay organized and productive. Our platform combines intuitive design with powerful 
+            features to create the perfect task management solution.
+          </p>
+        </div>
       </motion.div>
+
+      <motion.section
+        className="mt-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl overflow-hidden"
+        variants={fadeInUp}
+        transition={{ duration: 0.6, delay: 0.5 }}
+      >
+        <div className="px-8 py-12 text-center text-white">
+          <h2 className="text-3xl font-bold mb-4">
+            Ready to Get Started?
+          </h2>
+          <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
+            Join thousands of users who are already managing their tasks more effectively.
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <Link
+              href="/signup"
+              className="group relative px-8 py-4 bg-white rounded-lg overflow-hidden w-[180px]"
+            >
+              <span className="relative z-10 flex items-center justify-center w-full text-indigo-600 text-lg font-semibold whitespace-nowrap">
+                <span className="transform group-hover:-translate-x-3 transition-transform duration-300">
+                  Get Started
+                </span>
+                <span className="absolute -right-6 opacity-0 group-hover:opacity-100 group-hover:right-0 transition-all duration-300">
+                  →
+                </span>
+              </span>
+              <span className="absolute inset-0 bg-gray-100 transform translate-x-full group-hover:translate-x-0 transition-transform duration-500"></span>
+            </Link>
+            <Link
+              href="/login"
+              className="px-8 py-4 text-white border-2 border-white/20 rounded-lg hover:bg-white/10 transition-colors text-lg font-semibold"
+            >
+              Log In
+            </Link>
+          </div>
+        </div>
+      </motion.section>
     </motion.div>
   );
 } 

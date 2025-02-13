@@ -7,29 +7,33 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
+  updateProfile,
 } from 'firebase/auth';
 import { auth, db } from '@/config/firebase';
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import type { UserProfile, SignUpData } from '@/types/auth';
-import LoadingScreen from '@/components/LoadingScreen';
+import type { UserProfile, SignUpData, UpdateUserProfileData, AuthUser } from '@/types/user';
+import LoadingScreen from '@/components/ui/LoadingScreen';
 import { setCookie, deleteCookie } from '@/utils/cookies';
+import { CustomUser } from '@/types/user';
 
 interface AuthContextType {
-  user: FirebaseUser | null;
+  user: AuthUser | null;
   userProfile: UserProfile | null;
   signUp: (data: SignUpData) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (data: { firstName: string; lastName: string }) => Promise<void>;
+  updateUserProfile: (data: UpdateUserProfileData) => Promise<void>;
   isLoading: boolean;
   authSuccess: boolean;
   clearAuthSuccess: () => void;
+  refreshUserProfile: () => Promise<void>;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -43,38 +47,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!mounted) return;
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setIsLoading(true);
-      setUser(user);
 
-      if (user) {
+      if (firebaseUser) {
         try {
-          // Set the token cookie on auth state change
-          const idToken = await user.getIdToken();
+          const idToken = await firebaseUser.getIdToken();
           setCookie('firebase-token', idToken);
           
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
-            setUserProfile({
-              id: user.uid,
-              email: user.email!,
+            const userProfile: AuthUser = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName,
               firstName: data.firstName,
               lastName: data.lastName,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date()
-            });
+              emailVerified: firebaseUser.emailVerified,
+              isAnonymous: firebaseUser.isAnonymous,
+              createdAt: data.createdAt?.toDate(),
+              updatedAt: data.updatedAt?.toDate(),
+              metadata: {
+                creationTime: firebaseUser.metadata.creationTime,
+                lastSignInTime: firebaseUser.metadata.lastSignInTime
+              }
+            };
+            setUser(userProfile);
+            setUserProfile(userProfile);
           }
         } catch (error) {
-          console.error('Error setting up user:', error);
-          await firebaseSignOut(auth);
+          console.error('Error fetching user profile:', error);
+          setUser(null);
           setUserProfile(null);
-          deleteCookie('firebase-token');
         }
       } else {
+        setUser(null);
         setUserProfile(null);
         deleteCookie('firebase-token');
       }
+      
       setIsLoading(false);
     });
 
@@ -88,20 +100,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (data: SignUpData) => {
     setIsLoading(true);
     try {
+      // Create the user account
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         data.email,
         data.password
       );
 
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
+      // Set the display name
+      await updateProfile(userCredential.user, {
+        displayName: `${data.firstName} ${data.lastName}`.trim()
+      });
+
+      // Create a user document in Firestore
+      const userDoc = doc(db, 'users', userCredential.user.uid);
+      await setDoc(userDoc, {
         email: data.email,
         firstName: data.firstName,
         lastName: data.lastName,
+        displayName: `${data.firstName} ${data.lastName}`.trim(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
       setAuthSuccess(true);
+    } catch (error) {
+      console.error('Error in signUp:', error);
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -139,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateProfile = async (data: { firstName: string; lastName: string }) => {
+  const updateUserProfile = async (data: UpdateUserProfileData) => {
     if (!user) throw new Error('No user logged in');
 
     const userRef = doc(db, 'users', user.uid);
@@ -148,16 +173,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updatedAt: serverTimestamp()
     });
 
-    if (userProfile) {
-      setUserProfile({
-        ...userProfile,
-        ...data,
-        updatedAt: new Date()
-      });
+    // Fetch updated profile
+    const updatedDoc = await getDoc(userRef);
+    if (updatedDoc.exists()) {
+      const updatedData = updatedDoc.data();
+      setUserProfile(prev => ({
+        ...prev!,
+        ...updatedData,
+        updatedAt: updatedData.updatedAt?.toDate() || new Date()
+      }));
     }
   };
 
   const clearAuthSuccess = () => setAuthSuccess(false);
+
+  const refreshUserProfile = async () => {
+    if (auth.currentUser) {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data() as UserProfile);
+      }
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ 
@@ -166,10 +203,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp, 
       signIn, 
       signOut,
-      updateProfile,
+      updateUserProfile,
       isLoading,
       authSuccess,
-      clearAuthSuccess 
+      clearAuthSuccess,
+      refreshUserProfile,
+      loading: isLoading,
     }}>
       {isTransitioning && <LoadingScreen />}
       {children}

@@ -4,9 +4,14 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { auth } from '@/config/firebase';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/context/AuthContext';
+import { UpdateUserProfileData } from '@/types/user';
 
 interface SettingsProps {
-  user: any; // Firebase user
+  user: any;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 interface ProfileData {
@@ -20,7 +25,14 @@ interface PasswordData {
   confirmPassword: string;
 }
 
-export default function Settings({ user }: SettingsProps) {
+interface NotificationSettings {
+  goalShared: boolean;
+  goalUpdated: boolean;
+  goalCompleted: boolean;
+}
+
+export default function Settings({ user, isOpen, onClose }: SettingsProps) {
+  const { updateUserProfile } = useAuth();
   const [profileData, setProfileData] = useState<ProfileData>({
     firstName: user?.displayName?.split(' ')[0] || '',
     lastName: user?.displayName?.split(' ')[1] || ''
@@ -30,6 +42,12 @@ export default function Settings({ user }: SettingsProps) {
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
+  });
+
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    goalShared: true,
+    goalUpdated: true,
+    goalCompleted: true,
   });
 
   const [loading, setLoading] = useState(false);
@@ -47,6 +65,9 @@ export default function Settings({ user }: SettingsProps) {
       await updateProfile(auth.currentUser!, {
         displayName: fullName
       });
+      await updateUserProfile({
+        displayName: fullName
+      } as UpdateUserProfileData);
       setSuccess('Profile updated successfully!');
     } catch (error) {
       setError('Failed to update profile. Please try again.');
@@ -74,10 +95,7 @@ export default function Settings({ user }: SettingsProps) {
         passwordData.currentPassword
       );
       
-      // Re-authenticate user
       await reauthenticateWithCredential(auth.currentUser!, credential);
-      
-      // Update password
       await updatePassword(auth.currentUser!, passwordData.newPassword);
       
       setSuccess('Password updated successfully!');
@@ -100,8 +118,6 @@ export default function Settings({ user }: SettingsProps) {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Settings</h1>
-
       {/* Profile Settings */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-xl font-bold mb-6">Profile Settings</h2>
@@ -200,6 +216,58 @@ export default function Settings({ user }: SettingsProps) {
             {loading ? 'Updating...' : 'Change Password'}
           </button>
         </form>
+      </div>
+
+      {/* Notification Settings */}
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-medium">Notification Settings</h3>
+          <p className="text-sm text-gray-500">Choose what you want to be notified about</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium">Goal Sharing</h4>
+              <p className="text-sm text-gray-500">When someone shares a goal with you</p>
+            </div>
+            <Switch
+              checked={notificationSettings.goalShared}
+              onCheckedChange={(checked: boolean) => setNotificationSettings(prev => ({ 
+                ...prev, 
+                goalShared: checked 
+              }))}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium">Goal Updates</h4>
+              <p className="text-sm text-gray-500">When a shared goal is updated</p>
+            </div>
+            <Switch
+              checked={notificationSettings.goalUpdated}
+              onCheckedChange={(checked: boolean) => setNotificationSettings(prev => ({ 
+                ...prev, 
+                goalUpdated: checked 
+              }))}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium">Goal Completion</h4>
+              <p className="text-sm text-gray-500">When a shared goal is completed</p>
+            </div>
+            <Switch
+              checked={notificationSettings.goalCompleted}
+              onCheckedChange={(checked: boolean) => setNotificationSettings(prev => ({ 
+                ...prev, 
+                goalCompleted: checked 
+              }))}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Error/Success Messages */}

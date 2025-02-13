@@ -15,25 +15,28 @@ import {
   onSnapshot,
   serverTimestamp,
   Timestamp,
-  writeBatch
+  writeBatch,
+  getDocs
 } from 'firebase/firestore';
 import type { Todo, TaskLabel, TodoPriority, TodoStatus } from '@/types/todo';
 import { useAuth } from '@/context/AuthContext';
-import TaskList from '@/components/tasks/TaskList';
-import TaskForm from '@/components/tasks/TaskForm';
-import TaskFilters from '@/components/tasks/TaskFilters';
-import Goals from '@/components/Goals';
+import TaskList from '@/components/todos/TaskList';
+import TaskForm from '@/components/todos/TaskForm';
+import TaskFilters from '@/components/todos/TaskFilters';
+import Goals from '@/components/goals/Goals';
 import { useRouter } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import DateRangeFilter from '@/components/DateRangeFilter';
+import DateRangeFilter from '@/components/ui/DateRangeFilter';
 import { exportToCSV } from '@/utils/exportData';
-import TabNavigation, { TabId } from '@/components/TabNavigation';
+import TabNavigation from '@/components/layout/TabNavigation';
 import AnalyticsDashboard from '@/components/analytics/AnalyticsDashboard';
 import Link from 'next/link';
-import type { TaskFiltersState } from '@/components/tasks/TaskFilters';
-import Calendar from '@/components/tasks/Calendar';
-import Toast from '@/components/Toast';
+import type { TaskFiltersState } from '@/types/taskFilters';
+import Calendar from '@/components/todos/Calendar';
+import Toast from '@/components/shared/Toast';
 import Settings from '@/components/settings/Settings';
+import { Settings2 } from 'lucide-react';
+import { AuthUser } from '@/types/user';
 
 interface EditingTodo {
   id: string;
@@ -81,7 +84,70 @@ const isSameDay = (date1: Date, date2: Date) => {
     date1.getDate() === date2.getDate();
 };
 
+// Add this function at the top of your component or in a utils file
+const calculateAnalytics = (todos: Todo[]) => {
+  // Calculate completion rate
+  const completedTasks = todos.filter(todo => todo.completed).length;
+  const completionRate = todos.length > 0 
+    ? Math.round((completedTasks / todos.length) * 100) 
+    : 0;
+
+  // Calculate other analytics...
+  const priorityDistribution = {
+    high: todos.filter(todo => todo.priority === 'high').length,
+    medium: todos.filter(todo => todo.priority === 'medium').length,
+    low: todos.filter(todo => todo.priority === 'low').length
+  };
+
+  const labelStats = todos.reduce((acc: Record<string, number>, todo) => {
+    todo.labels?.forEach(label => {
+      acc[label] = (acc[label] || 0) + 1;
+    });
+    return acc;
+  }, {});
+
+  // Helper function to get date from updatedAt field
+  const getUpdatedAtDate = (todo: Todo) => {
+    if (!todo.updatedAt) return null;
+    
+    // Handle Firestore Timestamp
+    if (typeof todo.updatedAt === 'object' && 'toDate' in todo.updatedAt) {
+      return todo.updatedAt.toDate();
+    }
+    
+    // Handle regular Date object or string
+    return new Date(todo.updatedAt);
+  };
+
+  const recentCompletions = getLastNDays(7).map(date => ({
+    date,
+    count: todos.filter(todo => {
+      if (!todo.completed) return false;
+      
+      const updatedAtDate = getUpdatedAtDate(todo);
+      if (!updatedAtDate) return false;
+      
+      return updatedAtDate.toDateString() === date.toDateString();
+    }).length
+  }));
+
+  const overdueTasks = todos.filter(todo => 
+    !todo.completed && 
+    todo.dueDate && 
+    new Date(todo.dueDate) < new Date()
+  ).length;
+
+  return {
+    completionRate,
+    priorityDistribution,
+    labelStats,
+    recentCompletions,
+    overdueTasks
+  };
+};
+
 export default function DashboardPage() {
+  // All state declarations first
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -107,10 +173,10 @@ export default function DashboardPage() {
     start: new Date(new Date().setDate(new Date().getDate() - 30)),
     end: new Date()
   });
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialTab = searchParams.get('tab') || 'tasks';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [isFormVisible, setIsFormVisible] = useState(false);
-
-  // Add this state for task filters
   const [taskFilters, setTaskFilters] = useState<TaskFiltersState>({
     labels: [] as TaskLabel[],
     priority: 'all',
@@ -118,45 +184,35 @@ export default function DashboardPage() {
     showCompleted: false,
     sort: 'dueDate-asc'
   });
-
-  // Add this to your existing state declarations
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-
-  // Get all unique labels from todos
-  const allLabels = Array.from(new Set(todos.flatMap(todo => todo.labels || [])));
-
-  // Replace the single toast state with an array of toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  // Store the last deleted/completed task for undo functionality
   const [lastAction, setLastAction] = useState<{
     type: 'delete' | 'complete';
     task: Todo;
   } | null>(null);
-
-  // Add this helper function to add toasts
-  const addToast = (toast: Omit<ToastMessage, 'id'>) => {
-    const newToast = {
-      ...toast,
-      id: Math.random().toString(36).substr(2, 9)
-    };
-    setToasts(prev => [...prev, newToast]);
-
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== newToast.id));
-    }, 5000);
-  };
-
-  // Add state for settings modal
   const [showSettings, setShowSettings] = useState(false);
 
-  // Handle mounting
+  // Then all useEffect hooks together
+  useEffect(() => {
+    const handleTabChange = (e: CustomEvent) => {
+      setActiveTab(e.detail);
+    };
+
+    window.addEventListener('tabchange', handleTabChange as EventListener);
+    return () => window.removeEventListener('tabchange', handleTabChange as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || 'tasks';
+    setActiveTab(tab);
+  }, []);
+
+  // Your existing useEffects for todos, etc.
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Handle auth and data fetching
   useEffect(() => {
     if (!mounted) return;
     
@@ -333,28 +389,57 @@ export default function DashboardPage() {
   };
 
   const toggleTodo = async (todoId: string, completed: boolean) => {
-    const taskToToggle = todos.find(t => t.id === todoId);
-    if (!taskToToggle) return;
-
-    setLastAction({
-      type: 'complete',
-      task: { ...taskToToggle }
-    });
-
     try {
-      await updateDoc(doc(db, 'todos', todoId), {
-        completed: completed,
+      const todoRef = doc(db, 'todos', todoId);
+      const todo = todos.find(t => t.id === todoId);
+      if (!todo) return;
+
+      // Update the todo
+      await updateDoc(todoRef, {
+        completed,
+        updatedAt: serverTimestamp()
       });
+
+      // If the task was completed, update related goals
+      if (completed) {
+        const goalsQuery = query(
+          collection(db, 'goals'),
+          where('userId', '==', user?.uid),
+          where('createdAt', '<=', todo.updatedAt), // Only goals created before task completion
+          where('status', '==', 'in-progress')
+        );
+
+        const goalsSnapshot = await getDocs(goalsQuery);
+        const batch = writeBatch(db);
+
+        goalsSnapshot.forEach((goalDoc) => {
+          const goalData = goalDoc.data();
+          const currentProgress = goalData.progress || 0;
+          
+          // Update goal progress
+          batch.update(goalDoc.ref, {
+            progress: currentProgress + 1,
+            updatedAt: serverTimestamp(),
+            // If goal is complete, update status
+            ...(currentProgress + 1 >= goalData.targetTasks ? { status: 'completed' } : {})
+          });
+        });
+
+        await batch.commit();
+      }
+
       addToast({
-        message: completed ? 'Task completed!' : 'Task uncompleted!',
+        message: completed ? 'Task completed!' : 'Task uncompleted',
         type: 'success',
         undoAction: async () => {
-          await updateDoc(doc(db, 'todos', todoId), {
+          await updateDoc(todoRef, {
             completed: !completed,
+            updatedAt: serverTimestamp()
           });
         }
       });
     } catch (error) {
+      console.error('Error toggling todo:', error);
       addToast({
         message: 'Failed to update task',
         type: 'error'
@@ -392,13 +477,13 @@ export default function DashboardPage() {
   const updateTodo = async (todoData: Todo) => {
     try {
       const todoRef = doc(db, 'todos', todoData.id);
-      const updateData: any = {
+    const updateData: any = {
         title: todoData.title,
         description: todoData.description,
         priority: todoData.priority,
         labels: todoData.labels || [],
-        updatedAt: serverTimestamp()
-      };
+      updatedAt: serverTimestamp()
+    };
 
       if (todoData.dueDate) {
         updateData.dueDate = Timestamp.fromDate(new Date(todoData.dueDate));
@@ -448,7 +533,7 @@ export default function DashboardPage() {
       // Apply other filters
       if (taskFilters.priority !== 'all' && todo.priority !== taskFilters.priority) return false;
       if (taskFilters.search && !todo.title.toLowerCase().includes(taskFilters.search.toLowerCase())) return false;
-      if (taskFilters.labels.length > 0 && !taskFilters.labels.every(label => todo.labels?.includes(label))) return false;
+      if (taskFilters.labels.length > 0 && !taskFilters.labels.every((label: TaskLabel) => todo.labels?.includes(label))) return false;
       return true;
     })
     .sort((a, b) => {
@@ -485,7 +570,7 @@ export default function DashboardPage() {
     // Apply filters except completion status (handled in Calendar component)
     if (taskFilters.priority !== 'all' && todo.priority !== taskFilters.priority) return false;
     if (taskFilters.search && !todo.title.toLowerCase().includes(taskFilters.search.toLowerCase())) return false;
-    if (taskFilters.labels.length > 0 && !taskFilters.labels.every(label => todo.labels?.includes(label))) return false;
+    if (taskFilters.labels.length > 0 && !taskFilters.labels.every((label: TaskLabel) => todo.labels?.includes(label))) return false;
     return true;
   });
 
@@ -499,11 +584,25 @@ export default function DashboardPage() {
     transition: { duration: 0.6 }
   };
 
-  const handleTabChange = (tab: TabId) => {
-    setActiveTab(tab);
-    // Reset any form visibility when switching tabs
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
     setIsFormVisible(false);
     setEditingTodo(null);
+    window.history.pushState({}, '', `?tab=${newTab}`);
+  };
+
+  // Add this helper function to add toasts
+  const addToast = (toast: Omit<ToastMessage, 'id'>) => {
+    const newToast = {
+      ...toast,
+      id: Math.random().toString(36).substr(2, 9)
+    };
+    setToasts(prev => [...prev, newToast]);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== newToast.id));
+    }, 5000);
   };
 
   if (loading) {
@@ -516,90 +615,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Modern Fixed Header */}
-      <motion.header 
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-50 border-b border-gray-100"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="text-xl font-bold text-gray-900 font-space">
-                Task Project
-              </Link>
-              <nav className="hidden md:flex gap-6">
-                <button
-                  onClick={() => handleTabChange('dashboard')}
-                  className={`font-dm transition-colors ${
-                    activeTab === 'dashboard' 
-                      ? 'text-gray-900' 
-                      : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  Tasks
-                </button>
-                <button
-                  onClick={() => handleTabChange('goals')}
-                  className={`font-dm transition-colors ${
-                    activeTab === 'goals' 
-                      ? 'text-gray-900' 
-                      : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  Goals
-                </button>
-                <button
-                  onClick={() => handleTabChange('analytics')}
-                  className={`font-dm transition-colors ${
-                    activeTab === 'analytics' 
-                      ? 'text-gray-900' 
-                      : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  Analytics
-                </button>
-              </nav>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/settings"
-                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                aria-label="Profile Settings"
-              >
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className="h-5 w-5 text-gray-600" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                >
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={2} 
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={2} 
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="btn-hover-effect px-4 py-2 bg-gray-900 text-white rounded-full font-dm text-sm hover:bg-gray-800 transition-all duration-300"
-              >
-                Log out
-              </button>
-            </div>
-          </div>
-        </div>
-      </motion.header>
-
       {/* Main Content */}
       <main className="pt-24 pb-12 px-4">
         <div className="max-w-7xl mx-auto">
@@ -608,11 +623,19 @@ export default function DashboardPage() {
             animate="animate"
             variants={fadeIn}
           >
-            <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+            <TabNavigation
+              tabs={[
+                { id: 'tasks', label: 'Tasks' },
+                { id: 'goals', label: 'Goals' },
+                { id: 'analytics', label: 'Analytics' }
+              ]}
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+            />
             
             <div className="mt-8">
-              <AnimatePresence mode="wait" initial={false}>
-                {activeTab === 'dashboard' && (
+              <AnimatePresence mode="wait">
+                {(activeTab === 'tasks' || activeTab === 'dashboard') && (
                   <motion.div
                     key="tasks"
                     initial={{ opacity: 0, y: 20 }}
@@ -639,17 +662,17 @@ export default function DashboardPage() {
                             onCancel={() => setIsFormVisible(false)}
                           />
                         ) : (
-                          <TaskList
+                    <TaskList
                             tasks={filteredListTodos}
-                            onToggle={toggleTodo}
-                            onDelete={deleteTodo}
+                      onToggle={toggleTodo}
+                      onDelete={deleteTodo}
                             onEdit={updateTodo}
-                            onDragEnd={onDragEnd}
-                            onAddTodo={addTodo}
-                            filters={taskFilters}
+                      onDragEnd={onDragEnd}
+                      onAddTodo={addTodo}
+                      filters={taskFilters}
                             onFilterChange={setTaskFilters}
-                            availableLabels={allLabels}
-                          />
+                      availableLabels={Array.from(new Set(todos.flatMap(todo => todo.labels || [])))}
+                    />
                         )}
                       </div>
 
@@ -692,7 +715,7 @@ export default function DashboardPage() {
                       dateRange={dateRange}
                       onDateRangeChange={setDateRange}
                       onExport={handleExport}
-                      analytics={analytics}
+                      analytics={calculateAnalytics(todos)}
                     />
                   </motion.div>
                 )}
@@ -717,40 +740,14 @@ export default function DashboardPage() {
         </AnimatePresence>
       </div>
 
-      {/* Add Settings Modal */}
-      <AnimatePresence>
-        {showSettings && (
-          <div 
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-            onClick={(e) => {
-              // Close modal when clicking the backdrop
-              if (e.target === e.currentTarget) {
-                setShowSettings(false);
-              }
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-gray-50 rounded-2xl w-full max-w-2xl mx-4"
-            >
-              <div className="p-6 flex justify-between items-center border-b border-gray-200">
-                <h2 className="text-2xl font-bold">Settings</h2>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 80px)' }}>
-                <Settings user={user} />
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Settings Modal */}
+      {showSettings && (
+        <Settings 
+          user={user} 
+          isOpen={showSettings} 
+          onClose={() => setShowSettings(false)} 
+        />
+      )}
     </div>
   );
 } 

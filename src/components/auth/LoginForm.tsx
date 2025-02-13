@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { motion } from 'framer-motion';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');

@@ -6,7 +6,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided } 
 import type { Todo } from '@/types/todo';
 import TaskForm from './TaskForm';
 import TaskFilters from './TaskFilters';
-import type { TaskFiltersState } from './TaskFilters';
+import type { TaskFiltersState } from '@/types/taskFilters';
 import type { TaskLabel } from '@/types/todo';
 import EditTaskModal from './EditTaskModal';
 
