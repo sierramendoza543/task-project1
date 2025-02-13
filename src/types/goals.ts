@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type GoalStatus = 'in-progress' | 'completed' | 'cancelled';
+export type GoalStatus = 'not-started' | 'in-progress' | 'completed';
 export type GoalPriority = 'low' | 'medium' | 'high';
 
 export interface SharedUser {
@@ -72,7 +72,7 @@ export interface GoalData {
   description: string;
   targetTasks: number;
   progress: number;
-  status: 'in-progress' | 'completed';
+  status: GoalStatus;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   userId: string;

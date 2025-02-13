@@ -43,7 +43,10 @@ export default function TaskFilters({
         <div>
           <select
             value={filters.priority}
-            onChange={(e) => onFilterChange({ ...filters, priority: e.target.value })}
+            onChange={(e) => onFilterChange({ 
+              ...filters, 
+              priority: e.target.value as 'all' | 'low' | 'medium' | 'high' 
+            })}
             className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           >
             <option value="all">All Priorities</option>

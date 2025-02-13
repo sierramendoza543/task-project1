@@ -96,7 +96,7 @@ export default function TaskList({
         availableLabels={availableLabels}
       />
       
-      <DragDropContext>
+      <DragDropContext onDragEnd={() => {}}>
         <Droppable droppableId="tasks">
           {(provided) => (
             <div

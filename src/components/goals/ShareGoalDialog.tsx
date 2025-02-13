@@ -9,8 +9,8 @@ import { Dialog } from '@/components/ui/dialog';
 interface ShareGoalDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onShare: (goalId: string, email: string) => Promise<void>;
-  onLeave: () => Promise<void>;
+  onShare: (goalId: string, emails: string[]) => Promise<void>;
+  onLeave: (goalId: string) => void;
   currentSharedWith: SharedUser[];
   isOwner: boolean;
   ownerEmail: string;
@@ -37,7 +37,7 @@ const ShareGoalDialog = ({
 
     setIsSubmitting(true);
     try {
-      await onShare(goalId, email);
+      await onShare(goalId, [email]);
       setEmail('');
     } catch (error) {
       console.error('Error sharing goal:', error);
@@ -63,7 +63,7 @@ const ShareGoalDialog = ({
                 <span className="text-sm">{user.email}</span>
                 {user.email === currentUserEmail && (
                   <button
-                    onClick={() => onLeave()}
+                    onClick={() => onLeave(goalId)}
                     className="text-red-600 text-sm hover:text-red-800"
                   >
                     Leave

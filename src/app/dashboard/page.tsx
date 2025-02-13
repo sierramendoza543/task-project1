@@ -268,7 +268,7 @@ export default function DashboardPage() {
       const docRef = await addDoc(collection(db, 'todos'), newTodo);
       
       setToasts(prev => [...prev, {
-        id: Date.now(),
+        id: Date.now().toString(),
         message: 'Task created successfully',
         type: 'success',
       }]);
@@ -276,7 +276,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error adding todo:', error);
       setToasts(prev => [...prev, {
-        id: Date.now(),
+        id: Date.now().toString(),
         message: 'Failed to create task',
         type: 'error',
       }]);
@@ -300,7 +300,7 @@ export default function DashboardPage() {
       });
 
       setToasts(prev => [...prev, {
-        id: Date.now(),
+        id: Date.now().toString(),
         message: todo.completed ? 'Task uncompleted' : 'Task completed',
         type: 'success'
       }]);
@@ -308,7 +308,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error toggling todo:', error);
       setToasts(prev => [...prev, {
-        id: Date.now(),
+        id: Date.now().toString(),
         message: 'Failed to update task',
         type: 'error'
       }]);

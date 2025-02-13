@@ -307,7 +307,7 @@ export default function Goals({ userId, todos }: GoalsProps) {
     description: data.description || '',
     targetTasks: data.targetTasks,
     progress: data.progress,
-    status: data.status === 'cancelled' ? 'in-progress' : data.status,
+    status: data.status,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     userId: data.userId,
@@ -330,11 +330,14 @@ export default function Goals({ userId, todos }: GoalsProps) {
       }
 
       // Format the shared users
-      const sharedWith = emails.map(email => ({ email }));
+      const sharedWith = emails.map(email => ({ 
+        email,
+        addedAt: serverTimestamp() 
+      }));
 
       // Update the goal with new shared users
       await updateDoc(goalRef, {
-        sharedWith,
+        sharedWith: arrayUnion(...sharedWith),
         updatedAt: serverTimestamp()
       });
 

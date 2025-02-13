@@ -5,9 +5,8 @@
   "targets": {
     "login-app-156f1": {
       "hosting": {
-        "task-project-123": [
-          "task-project-123"
-        ]
+        "default": ["login-app-156f1"],
+        "task-project2": ["task-project2"]
       }
     }
   },
