@@ -244,8 +244,7 @@ export default function HomePage() {
                 {[
                   "Monthly, weekly, and daily views",
                   "Drag and drop task scheduling",
-                  "Deadline reminders and notifications",
-                  "Sync with popular calendar apps"
+                  "Share goals with others"
                 ].map((feature) => (
                   <li key={feature} className="flex items-center gap-3 text-gray-700 font-dm">
                     <CheckCircle className="w-5 h-5 text-indigo-600" />
@@ -337,7 +336,7 @@ export default function HomePage() {
                   Ready to Get Started?
                 </motion.h2>
                 <p className="text-xl text-gray-600 font-dm max-w-2xl mx-auto">
-                  Join thousands of users who are already organizing their lives better.
+                  Join a community of users who are already organizing their lives better.
                   It's completely free!
                 </p>
                 <motion.div
