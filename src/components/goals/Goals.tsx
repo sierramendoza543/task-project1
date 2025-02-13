@@ -120,6 +120,28 @@ export default function Goals({ userId, todos }: GoalsProps) {
     message: string;
   } | null>(null);
 
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  // Filter goals based on completion status
+  const filteredPersonalGoals = personalGoals.filter(goal => 
+    showCompleted ? true : goal.status !== 'completed'
+  );
+
+  const filteredSharedGoals = sharedGoals.filter(goal => 
+    showCompleted ? true : goal.status !== 'completed'
+  );
+
+  // Calculate stats from both personal and shared goals
+  const stats = {
+    total: personalGoals.length + sharedGoals.length,
+    completed: personalGoals.filter(g => g.status === 'completed').length + 
+               sharedGoals.filter(g => g.status === 'completed').length,
+    inProgress: personalGoals.filter(g => g.status === 'in-progress').length +
+                sharedGoals.filter(g => g.status === 'in-progress').length,
+    notStarted: personalGoals.filter(g => g.status === 'not-started').length +
+                sharedGoals.filter(g => g.status === 'not-started').length
+  };
+
   const addToast = (message: string, type: 'success' | 'error' | 'info') => {
     setToasts(prev => [...prev, { 
       id: Date.now().toString(), 
@@ -130,94 +152,46 @@ export default function Goals({ userId, todos }: GoalsProps) {
 
   // Fetch goals
   useEffect(() => {
-    if (!userId || !auth.currentUser?.email) {
-      setLoading(false);
-      return;
-    }
+    if (!userId || !auth.currentUser?.email) return;
 
-    let unsubscribePersonal: () => void;
-    let unsubscribeSharedWithMe: () => void;
-    let unsubscribeMyShared: () => void;
+    // Query for personal goals (goals user created and hasn't shared)
+    const personalQuery = query(
+      collection(db, 'goals'),
+      where('userId', '==', userId),
+      where('sharedWith', '==', []), // Only get goals that aren't shared
+      orderBy('createdAt', 'desc')
+    );
 
-    const setupSubscriptions = async () => {
-      try {
-        // Personal goals query - goals with empty sharedWith array
-        const personalQuery = query(
-          collection(db, 'goals'),
-          where('userId', '==', userId),
-          where('sharedWith', '==', []),
-          orderBy('createdAt', 'desc')
-        );
+    // Query for shared goals (either shared by user or shared with user)
+    const sharedQuery = query(
+      collection(db, 'goals'),
+      where('sharedWith', 'array-contains', { email: auth.currentUser.email }),
+      orderBy('createdAt', 'desc')
+    );
 
-        // Shared goals query - goals shared with current user
-        const sharedWithMeQuery = query(
-          collection(db, 'goals'),
-          where('sharedWith', 'array-contains', {
-            email: auth.currentUser?.email,
-          }),
-          orderBy('createdAt', 'desc')
-        );
+    // Set up real-time listeners
+    const unsubPersonal = onSnapshot(personalQuery, (snapshot) => {
+      const goals = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as GoalData[];
+      setPersonalGoals(goals);
+    });
 
-        // Goals that I've shared with others
-        const mySharedGoalsQuery = query(
-          collection(db, 'goals'),
-          where('userId', '==', userId),
-          where('sharedWith', '!=', []),
-          orderBy('createdAt', 'desc')
-        );
+    const unsubShared = onSnapshot(sharedQuery, (snapshot) => {
+      const goals = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as GoalData[];
+      setSharedGoals(goals);
+    });
 
-        // Set up listeners
-        unsubscribePersonal = onSnapshot(personalQuery, (snapshot) => {
-          const goalsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as GoalData[];
-          setPersonalGoals(goalsData);
-        });
-
-        unsubscribeSharedWithMe = onSnapshot(sharedWithMeQuery, (snapshot) => {
-          const goalsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as GoalData[];
-          setSharedGoals(prev => {
-            // Combine with existing shared goals, avoiding duplicates
-            const existingGoals = prev.filter(g => 
-              !goalsData.some(newGoal => newGoal.id === g.id)
-            );
-            return [...existingGoals, ...goalsData];
-          });
-        });
-
-        unsubscribeMyShared = onSnapshot(mySharedGoalsQuery, (snapshot) => {
-          const goalsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as GoalData[];
-          setSharedGoals(prev => {
-            // Combine with existing shared goals, avoiding duplicates
-            const existingGoals = prev.filter(g => 
-              !goalsData.some(newGoal => newGoal.id === g.id)
-            );
-            return [...existingGoals, ...goalsData];
-          });
-        });
-
-        return () => {
-          unsubscribePersonal?.();
-          unsubscribeSharedWithMe?.();
-          unsubscribeMyShared?.();
-        };
-      } catch (error) {
-        console.error('Error setting up goal subscriptions:', error);
-      }
-    };
-
-    setupSubscriptions();
+    // Cleanup listeners
     return () => {
-      unsubscribePersonal?.();
+      unsubPersonal();
+      unsubShared();
     };
-  }, [userId]);
+  }, [userId, auth.currentUser?.email]);
 
   // Handle adding a new goal
   const handleSubmit = async (e: FormEvent) => {
@@ -345,37 +319,27 @@ export default function Goals({ userId, todos }: GoalsProps) {
   });
 
   // Handle sharing a goal
-  const handleShare = async (goalId: string, newUserEmail: string) => {
+  const handleShare = async (goalId: string, emails: string[]) => {
     try {
       const goalRef = doc(db, 'goals', goalId);
       const goalDoc = await getDoc(goalRef);
-      const goalData = goalDoc.data();
-
-      if (!goalData) {
+      
+      if (!goalDoc.exists()) {
         addToast('Goal not found', 'error');
         return;
       }
 
-      // Check if already shared
-      const sharedWith = goalData.sharedWith || [];
-      if (sharedWith.some((user: SharedUser) => user.email === newUserEmail)) {
-        addToast('This goal is already shared with this user', 'error');
-        return;
-      }
+      // Format the shared users
+      const sharedWith = emails.map(email => ({ email }));
 
-      // Add new user to shared list - only store email for query matching
-      const newSharedUser = {
-        email: newUserEmail // Remove addedAt for query matching
-      };
-
-      // Move goal to shared goals by updating it
+      // Update the goal with new shared users
       await updateDoc(goalRef, {
-        sharedWith: arrayUnion(newSharedUser),
+        sharedWith,
         updatedAt: serverTimestamp()
       });
 
-      addToast(`Goal shared with ${newUserEmail}`, 'success');
       setIsShareDialogOpen(null);
+      addToast('Goal shared successfully', 'success');
     } catch (error) {
       console.error('Error sharing goal:', error);
       addToast('Failed to share goal', 'error');
@@ -570,204 +534,50 @@ export default function Goals({ userId, todos }: GoalsProps) {
   if (!auth.currentUser?.email) return;
 
   return (
-    <div className="space-y-6">
-      <GoalTabs 
-        activeTab={activeTab} 
-        onTabChange={handleTabChange}
-        personalCount={personalGoals.length}
-        sharedCount={sharedGoals.length}
-      />
-      <GoalStats goals={goals as GoalData[]} />
+    <div className="space-y-8">
+      {/* Pass the calculated stats */}
+      <GoalStats stats={stats} />
 
-      {/* Add New Goal Button */}
-      {activeTab === 'personal' && (
-        <>
-          <button
-            onClick={() => setShowAddGoal(true)}
-            className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800"
-          >
-            <PlusIcon className="w-5 h-5" />
-            Add New Goal
-          </button>
-
-          {/* Add Goal Modal */}
-          <AnimatePresence>
-            {showAddGoal && (
-              <div
-                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-                onClick={(e) => {
-                  if (e.target === e.currentTarget) {
-                    setShowAddGoal(false);
-                  }
-                }}
-              >
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white rounded-2xl shadow-lg w-full max-w-2xl mx-4 overflow-hidden"
-                >
-                  <div className="p-6 border-b border-gray-100">
-                    <h3 className="text-lg font-semibold">Add New Goal</h3>
-                  </div>
-                  <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    <input
-                      type="text"
-                      value={newGoal.title}
-                      onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })}
-                      placeholder="Goal title"
-                      className="w-full px-4 py-2 border rounded-md"
-                      required
-                    />
-                    <textarea
-                      value={newGoal.description}
-                      onChange={(e) => setNewGoal({ ...newGoal, description: e.target.value })}
-                      placeholder="Goal description"
-                      className="w-full px-4 py-2 border rounded-md"
-                    />
-                    <div className="flex gap-4">
-                      <input
-                        type="date"
-                        value={newGoal.targetDate.toISOString().split('T')[0]}
-                        onChange={(e) => setNewGoal({ ...newGoal, targetDate: new Date(e.target.value) })}
-                        className="px-4 py-2 border rounded-md"
-                        required
-                      />
-                      <select
-                        value={newGoal.priority}
-                        onChange={(e) => setNewGoal({ ...newGoal, priority: e.target.value as GoalPriority })}
-                        className="px-4 py-2 border rounded-md"
-                      >
-                        <option value="low">Low Priority</option>
-                        <option value="medium">Medium Priority</option>
-                        <option value="high">High Priority</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Target Number of Tasks
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="1"
-                          value={newGoal.targetTasks}
-                          onChange={(e) => setNewGoal({ ...newGoal, targetTasks: Math.max(1, parseInt(e.target.value)) })}
-                          className="px-4 py-2 border rounded-md w-32"
-                          required
-                        />
-                        <span className="text-gray-600">tasks to complete</span>
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        Set how many tasks you need to complete to achieve this goal
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Tags</label>
-                      <TagInput
-                        tags={newGoal.tags}
-                        onTagsChange={(tags) => setNewGoal({ ...newGoal, tags })}
-                        suggestedTags={allTags}
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowAddGoal(false)}
-                        className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                      >
-                        Create Goal
-                      </button>
-                    </div>
-                  </form>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* Toast Notifications */}
-          <div className="fixed bottom-4 left-4 space-y-2 z-50">
-            <AnimatePresence>
-              {toasts.map(toast => (
-                <Toast
-                  key={toast.id}
-                  message={toast.message}
-                  type={toast.type}
-                  onUndo={toast.undoAction}
-                  onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+      {/* Goals Sections */}
+      <div className="space-y-12">
+        {/* Personal Goals */}
+        <section>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Personal Goals</h2>
+            <div className="flex items-center gap-4">
+              {/* Add Show Completed Checkbox */}
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={showCompleted}
+                  onChange={(e) => setShowCompleted(e.target.checked)}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
-              ))}
-            </AnimatePresence>
+                Show Completed Goals
+              </label>
+              <button
+                onClick={() => setShowAddGoal(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Add Goal
+              </button>
+            </div>
           </div>
-        </>
-      )}
-
-      {/* Goals List */}
-      <motion.div 
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="space-y-4"
-      >
-        {getFilteredGoals().map((goal) => (
-          <motion.div
-            key={goal.id}
-            variants={itemVariants}
-            className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-semibold">{goal.title}</h3>
-                <p className="text-gray-600">{goal.description}</p>
-              </div>
-              <div className="flex gap-2">
-                {activeTab === 'shared' ? (
-                  // Shared goal actions
-                  <>
-                    <button
-                      onClick={() => setIsShareDialogOpen(goal.id)}
-                      className="text-indigo-600 hover:text-indigo-800 text-sm font-dm flex items-center gap-1"
-                    >
-                      <span>👥</span> Manage Sharing
-                    </button>
-                    {goal.userId === userId ? (
-                      // Owner actions
-                      <>
-                        <button
-                          onClick={() => startEditing(goal)}
-                          className="text-indigo-600 hover:text-indigo-800 text-sm font-dm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteGoal(goal.id)}
-                          className="text-red-600 hover:text-red-800 text-sm font-dm"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    ) : (
-                      // Non-owner actions
-                      <button
-                        onClick={() => handleLeaveGoal(goal.id)}
-                        className="text-red-600 hover:text-red-800 text-sm font-dm"
-                      >
-                        Leave Goal
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  // Personal goal actions
-                  <>
+          
+          {/* Personal Goals Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredPersonalGoals.map(goal => (
+              <motion.div
+                key={goal.id}
+                variants={itemVariants}
+                className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">{goal.title}</h3>
+                    <p className="text-gray-600">{goal.description}</p>
+                  </div>
+                  <div className="flex gap-2">
                     <button
                       onClick={() => setIsShareDialogOpen(goal.id)}
                       className="text-indigo-600 hover:text-indigo-800 text-sm font-dm flex items-center gap-1"
@@ -786,44 +596,113 @@ export default function Goals({ userId, todos }: GoalsProps) {
                     >
                       Delete
                     </button>
-                  </>
+                  </div>
+                </div>
+
+                {renderGoalProgress(goal)}
+
+                {isShareDialogOpen === goal.id && (
+                  <ShareGoalDialog
+                    isOpen={true}
+                    onClose={() => setIsShareDialogOpen(null)}
+                    onShare={handleShare}
+                    onLeave={() => handleLeaveGoal(goal.id)}
+                    currentSharedWith={goal.sharedWith || []}
+                    isOwner={goal.userId === auth.currentUser?.uid}
+                    ownerEmail={goal.ownerEmail}
+                    goalId={goal.id}
+                  />
                 )}
-              </div>
-            </div>
+              </motion.div>
+            ))}
+          </div>
+        </section>
 
-            {renderGoalProgress(goal)}
-
-            {isShareDialogOpen === goal.id && (
-              <ShareGoalDialog
-                isOpen={true}
-                onClose={() => setIsShareDialogOpen(null)}
-                onShare={handleShare}
-                onLeave={() => handleLeaveGoal(goal.id)}
-                currentSharedWith={goal.sharedWith || []}
-                isOwner={goal.userId === auth.currentUser?.uid}
-                ownerEmail={goal.ownerEmail}
-                goalId={goal.id}
+        {/* Shared Goals */}
+        <section>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Shared Goals</h2>
+            {/* Show same completed filter for shared goals */}
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-            )}
-          </motion.div>
-        ))}
-      </motion.div>
+              <span>Show Completed Goals</span>
+            </div>
+          </div>
+          
+          {/* Shared Goals Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredSharedGoals.map(goal => (
+              <motion.div
+                key={goal.id}
+                variants={itemVariants}
+                className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">{goal.title}</h3>
+                    <p className="text-gray-600">{goal.description}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsShareDialogOpen(goal.id)}
+                      className="text-indigo-600 hover:text-indigo-800 text-sm font-dm flex items-center gap-1"
+                    >
+                      <span>👥</span> Share
+                    </button>
+                    <button
+                      onClick={() => startEditing(goal)}
+                      className="text-indigo-600 hover:text-indigo-800 text-sm font-dm"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => deleteGoal(goal.id)}
+                      className="text-red-600 hover:text-red-800 text-sm font-dm"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
 
-      {activeTab === 'shared' && getFilteredGoals().length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center py-12 px-4"
-        >
-          <div className="mb-4 text-4xl">🤝</div>
-          <h3 className="text-xl font-semibold mb-2 text-gray-800">
-            No Goals Yet
-          </h3>
-          <p className="text-gray-600 max-w-md mx-auto">
-            Create a new goal in the Personal Goals tab and share it with another user to start collaborating!
-          </p>
-        </motion.div>
-      )}
+                {renderGoalProgress(goal)}
+
+                {isShareDialogOpen === goal.id && (
+                  <ShareGoalDialog
+                    isOpen={true}
+                    onClose={() => setIsShareDialogOpen(null)}
+                    onShare={handleShare}
+                    onLeave={() => handleLeaveGoal(goal.id)}
+                    currentSharedWith={goal.sharedWith || []}
+                    isOwner={goal.userId === auth.currentUser?.uid}
+                    ownerEmail={goal.ownerEmail}
+                    goalId={goal.id}
+                  />
+                )}
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 left-4 space-y-2 z-50">
+        <AnimatePresence>
+          {toasts.map(toast => (
+            <Toast
+              key={toast.id}
+              message={toast.message}
+              type={toast.type}
+              onUndo={toast.undoAction}
+              onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* Edit Goal Modal */}
       <AnimatePresence>

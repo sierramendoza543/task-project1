@@ -22,13 +22,39 @@ export default function TaskForm({ onSubmit, onCancel, initialData, isEditing }:
   });
   const [includeTime, setIncludeTime] = useState(!!initialData?.dueTime);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
-      ...formData,
-      dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
-      dueTime: formData.dueTime || undefined
-    });
+    
+    if (!formData.title.trim()) return;
+
+    try {
+      const newTodo = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        priority: formData.priority,
+        dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
+        dueTime: formData.dueTime || undefined,
+        labels: formData.labels,
+      };
+
+      console.log('Submitting new todo:', newTodo); // Debug log
+      
+      await onSubmit(newTodo);
+      
+      // Clear form
+      setFormData({
+        title: '',
+        description: '',
+        priority: 'medium',
+        dueDate: '',
+        dueTime: '',
+        labels: []
+      });
+      setIncludeTime(false);
+      
+    } catch (error) {
+      console.error('Error in task form submission:', error);
+    }
   };
 
   return (

@@ -16,7 +16,8 @@ import {
   serverTimestamp,
   Timestamp,
   writeBatch,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import type { Todo, TaskLabel, TodoPriority, TodoStatus } from '@/types/todo';
 import { useAuth } from '@/context/AuthContext';
@@ -24,7 +25,7 @@ import TaskList from '@/components/todos/TaskList';
 import TaskForm from '@/components/todos/TaskForm';
 import TaskFilters from '@/components/todos/TaskFilters';
 import Goals from '@/components/goals/Goals';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import DateRangeFilter from '@/components/ui/DateRangeFilter';
 import { exportToCSV } from '@/utils/exportData';
@@ -79,7 +80,7 @@ const getLastNDays = (n: number) => {
   return result;
 };
 
-const isSameDay = (timestamp: Timestamp, date: Date) => {
+const isSameDay = (timestamp: Timestamp | Date, date: Date) => {
   const timestampDate = timestampToDate(timestamp);
   return timestampDate.getFullYear() === date.getFullYear() &&
     timestampDate.getMonth() === date.getMonth() &&
@@ -149,435 +150,174 @@ const calculateAnalytics = (todos: Todo[]) => {
 };
 
 export default function DashboardPage() {
-  // All state declarations first
-  const { user, signOut } = useAuth();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get('tab') || 'tasks';
+
+  // 1. Context hooks
+  const { user, loading } = useAuth();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+
+  // 2. State hooks
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [newTodoTitle, setNewTodoTitle] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingTodo, setEditingTodo] = useState<EditingTodo | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [filter, setFilter] = useState<{
-    labels: TaskLabel[];
-    priority: string;
-    completed: 'all' | 'completed' | 'active';
-    search: string;
-  }>({
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('tasks');
+  const [taskFilters, setTaskFilters] = useState<TaskFiltersState>({
     labels: [],
     priority: 'all',
-    completed: 'all',
     search: '',
+    showCompleted: false,
+    sort: 'dueDate-desc'
+  });
+  const [filter, setFilter] = useState({
+    search: '',
+    priority: 'all',
+    labels: [] as string[]
   });
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().setDate(new Date().getDate() - 30)),
     end: new Date()
   });
-  const searchParams = new URLSearchParams(window.location.search);
-  const initialTab = searchParams.get('tab') || 'tasks';
-  const [activeTab, setActiveTab] = useState(initialTab);
-  const [isFormVisible, setIsFormVisible] = useState(false);
-  const [taskFilters, setTaskFilters] = useState<TaskFiltersState>({
-    labels: [] as TaskLabel[],
-    priority: 'all',
-    search: '',
-    showCompleted: false,
-    sort: 'dueDate-asc'
-  });
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [lastAction, setLastAction] = useState<{
-    type: 'delete' | 'complete';
-    task: Todo;
-  } | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
 
-  // Then all useEffect hooks together
-  useEffect(() => {
-    const handleTabChange = (e: CustomEvent) => {
-      setActiveTab(e.detail);
-    };
-
-    window.addEventListener('tabchange', handleTabChange as EventListener);
-    return () => window.removeEventListener('tabchange', handleTabChange as EventListener);
-  }, []);
-
+  // 3. Effects
+  // Initial tab setup
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab') || 'tasks';
-    setActiveTab(tab);
-  }, []);
-
-  // Your existing useEffects for todos, etc.
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    
-    if (!user) {
-      router.replace('/login');
-      return;
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
     }
+  }, []);
 
-    setLoading(true);
+  // Todos listener
+  useEffect(() => {
+    if (!user?.uid) return;
 
     try {
       const q = query(
         collection(db, 'todos'),
         where('userId', '==', user.uid),
-        orderBy('order', 'asc'),
         orderBy('createdAt', 'desc')
       );
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        const todosList = snapshot.docs.map(doc => {
-          const data = doc.data();
-          const createdAt = data.createdAt?.toDate() || new Date();
-          const updatedAt = data.updatedAt?.toDate() || new Date();
-          const dueDate = data.dueDate?.toDate();
-
-          return {
-            id: doc.id,
-            title: data.title,
-            description: data.description || '',
-            completed: data.completed || false,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            order: data.order || 0,
-            priority: data.priority || 'low',
-            dueDate: dueDate,
-            labels: data.labels || [],
-            userId: data.userId,
-            status: data.status || 'pending',
-            dueTime: data.dueTime || null
-          };
-        });
-
-        setTodos(todosList);
-        setLoading(false);
+        const newTodos = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Todo[];
+        
+        console.log('Fetched todos:', newTodos);
+        setTodos(newTodos);
       }, (error) => {
-        console.error("Todos subscription error:", error);
-        setError("Failed to load todos");
-        setLoading(false);
+        console.error('Error fetching todos:', error);
       });
 
-      return () => {
-        unsubscribe();
-        setTodos([]);
-      };
+      return () => unsubscribe();
     } catch (error) {
-      console.error("Setup error:", error);
-      setError("Failed to set up todos");
-      setLoading(false);
+      console.error('Error setting up todos listener:', error);
     }
-  }, [user, router, mounted]);
+  }, [user?.uid]);
 
-  // Add analytics calculations
-  const analytics = {
-    // Task completion rate
-    completionRate: (todos: Todo[]) => {
-      const filtered = todos.filter(todo => {
-        const todoMillis = todo.createdAt.toMillis();
-        const startMillis = dateRange.start.getTime();
-        const endMillis = dateRange.end.getTime();
-        return todoMillis >= startMillis && todoMillis <= endMillis;
-      });
-      if (filtered.length === 0) return 0;
-      return (filtered.filter(todo => todo.completed).length / filtered.length) * 100;
-    },
-
-    // Priority distribution (renamed from tasksByPriority)
-    priorityDistribution: {
-      high: todos.filter(todo => todo.priority === 'high').length,
-      medium: todos.filter(todo => todo.priority === 'medium').length,
-      low: todos.filter(todo => todo.priority === 'low').length,
-    },
-
-    // Label statistics
-    labelStats: todos.reduce((acc: Record<string, number>, todo) => {
-      todo.labels?.forEach(label => {
-        acc[label] = (acc[label] || 0) + 1;
-      });
-      return acc;
-    }, {}),
-
-    // Recent completions
-    recentCompletions: getLastNDays(7).map(date => ({
-      date,
-      count: todos.filter(todo => 
-        todo.completed && 
-        todo.updatedAt && 
-        isSameDay(todo.updatedAt, date)
-      ).length
-    })),
-
-    // Overdue tasks
-    overdueTasks: todos.filter(todo => 
-      !todo.completed && 
-      todo.dueDate && 
-      todo.dueDate < new Date()
-    ).length
-  };
-
-  // Don't render anything until mounted
-  if (!mounted) {
-    return null;
-  }
-
-  const reorderTodos = async (startIndex: number, endIndex: number) => {
-    const updatedTodos = Array.from(todos);
-    const [removed] = updatedTodos.splice(startIndex, 1);
-    updatedTodos.splice(endIndex, 0, removed);
-
-    // Update the order in Firestore
-    const batch = writeBatch(db);
-    updatedTodos.forEach((todo, index) => {
-      const todoRef = doc(db, 'todos', todo.id);
-      batch.update(todoRef, { order: index });
-    });
-
+  // 4. Handlers
+  const handleAddTodo = async (todo: Partial<Todo>) => {
     try {
-      setTodos(updatedTodos);
-      await batch.commit();
-    } catch (error) {
-      console.error('Error updating order:', error);
-      setError('Failed to reorder todos');
-    }
-  };
+      if (!user?.uid) {
+        console.error('No user ID found');
+        return;
+      }
 
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const sourceIndex = result.source.index;
-    const destinationIndex = result.destination.index;
-
-    if (sourceIndex === destinationIndex) return;
-
-    reorderTodos(sourceIndex, destinationIndex);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      router.push('/');
-    } catch (error) {
-      console.error('Failed to log out:', error);
-    }
-  };
-
-  const addTodo = async (todoData: Partial<Todo>) => {
-    try {
-      const newTodo = {
-        title: todoData.title,
-        description: todoData.description,
+      // Base todo object with required fields
+      const baseTodo = {
+        title: todo.title || '',
+        description: todo.description || '',
+        userId: user.uid,
         completed: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        userId: user?.uid,
-        priority: todoData.priority || 'medium',
-        dueDate: todoData.dueDate ? Timestamp.fromDate(todoData.dueDate) : null,
-        dueTime: todoData.dueTime || null,
         order: todos.length,
-        labels: todoData.labels || []
+        labels: todo.labels || [],
+        priority: todo.priority || 'medium'
       };
 
-      await addDoc(collection(db, 'todos'), newTodo);
-      setIsFormVisible(false);
+      // Optional fields - only add if they have valid values
+      let additionalFields = {};
+      
+      if (todo.dueDate && !isNaN(new Date(todo.dueDate).getTime())) {
+        additionalFields = {
+          ...additionalFields,
+          dueDate: Timestamp.fromDate(new Date(todo.dueDate))
+        };
+      }
+
+      if (todo.dueTime && todo.dueTime.trim()) {
+        additionalFields = {
+          ...additionalFields,
+          dueTime: todo.dueTime.trim()
+        };
+      }
+
+      // Combine base todo with additional fields
+      const newTodo = {
+        ...baseTodo,
+        ...additionalFields
+      };
+
+      console.log('Creating new todo:', newTodo);
+
+      const docRef = await addDoc(collection(db, 'todos'), newTodo);
+      
+      setToasts(prev => [...prev, {
+        id: Date.now(),
+        message: 'Task created successfully',
+        type: 'success',
+      }]);
+
     } catch (error) {
       console.error('Error adding todo:', error);
+      setToasts(prev => [...prev, {
+        id: Date.now(),
+        message: 'Failed to create task',
+        type: 'error',
+      }]);
     }
   };
 
-  const toggleTodo = async (todoId: string, completed: boolean) => {
+  const handleToggle = async (id: string) => {
     try {
-      const todoRef = doc(db, 'todos', todoId);
-      const todo = todos.find(t => t.id === todoId);
-      if (!todo) return;
+      const todoRef = doc(db, 'todos', id);
+      const todoDoc = await getDoc(todoRef);
+      
+      if (!todoDoc.exists()) {
+        console.error('Todo not found');
+        return;
+      }
 
-      // Update the todo
+      const todo = todoDoc.data();
       await updateDoc(todoRef, {
-        completed,
+        completed: !todo.completed,
         updatedAt: serverTimestamp()
       });
 
-      // If the task was completed, update related goals
-      if (completed) {
-        const goalsQuery = query(
-          collection(db, 'goals'),
-          where('userId', '==', user?.uid),
-          where('createdAt', '<=', todo.updatedAt), // Only goals created before task completion
-          where('status', '==', 'in-progress')
-        );
+      setToasts(prev => [...prev, {
+        id: Date.now(),
+        message: todo.completed ? 'Task uncompleted' : 'Task completed',
+        type: 'success'
+      }]);
 
-        const goalsSnapshot = await getDocs(goalsQuery);
-        const batch = writeBatch(db);
-
-        goalsSnapshot.forEach((goalDoc) => {
-          const goalData = goalDoc.data();
-          const currentProgress = goalData.progress || 0;
-          
-          // Update goal progress
-          batch.update(goalDoc.ref, {
-            progress: currentProgress + 1,
-            updatedAt: serverTimestamp(),
-            // If goal is complete, update status
-            ...(currentProgress + 1 >= goalData.targetTasks ? { status: 'completed' } : {})
-          });
-        });
-
-        await batch.commit();
-      }
-
-      addToast({
-        message: completed ? 'Task completed!' : 'Task uncompleted',
-        type: 'success',
-        undoAction: async () => {
-          await updateDoc(todoRef, {
-            completed: !completed,
-            updatedAt: serverTimestamp()
-          });
-        }
-      });
     } catch (error) {
       console.error('Error toggling todo:', error);
-      addToast({
+      setToasts(prev => [...prev, {
+        id: Date.now(),
         message: 'Failed to update task',
         type: 'error'
-      });
+      }]);
     }
   };
 
-  const deleteTodo = async (todoId: string) => {
-    const taskToDelete = todos.find(t => t.id === todoId);
-    if (!taskToDelete) return;
+  // ... rest of your handlers
 
-    setLastAction({
-      type: 'delete',
-      task: { ...taskToDelete }
-    });
-
-    try {
-      await deleteDoc(doc(db, 'todos', todoId));
-      addToast({
-        message: 'Task deleted',
-        type: 'success',
-        undoAction: async () => {
-          const { id, ...taskData } = taskToDelete;
-          await addDoc(collection(db, 'todos'), taskData);
-        }
-      });
-    } catch (error) {
-      addToast({
-        message: 'Failed to delete task',
-        type: 'error'
-      });
-    }
-  };
-
-  const updateTodo = async (todoData: Todo) => {
-    try {
-      const todoRef = doc(db, 'todos', todoData.id);
-    const updateData: any = {
-        title: todoData.title,
-        description: todoData.description,
-        priority: todoData.priority,
-        labels: todoData.labels || [],
-      updatedAt: serverTimestamp()
-    };
-
-      if (todoData.dueDate) {
-        updateData.dueDate = Timestamp.fromDate(new Date(todoData.dueDate));
-      }
-      
-      if (todoData.dueTime !== undefined) {
-        updateData.dueTime = todoData.dueTime || null;
-      }
-
-      await updateDoc(todoRef, updateData);
-      setEditingTodo(null);
-      addToast({
-        message: 'Task updated successfully!',
-        type: 'success'
-      });
-    } catch (error) {
-      console.error('Error updating todo:', error);
-      addToast({
-        message: 'Failed to update task',
-        type: 'error'
-      });
-    }
-  };
-
-  const startEditing = (todo: Todo) => {
-    setEditingTodo({
-      id: todo.id,
-      title: todo.title,
-      description: todo.description || '',
-      priority: todo.priority || 'low',
-      dueDate: todo.dueDate,
-      dueTime: todo.dueTime
-    });
-  };
-
-  const cancelEditing = () => {
-    setEditingTodo(null);
-    setError('');
-  };
-
-  // Update the filtering logic to use toMillis() for comparison
-  const filteredTodos = todos.filter(todo => {
-    const todoMillis = todo.createdAt.toMillis();
-    const startMillis = dateRange.start.getTime();
-    const endMillis = dateRange.end.getTime();
-    return todoMillis >= startMillis && todoMillis <= endMillis;
-  });
-
-  // Update the calendar filtering to also use isInDateRange
-  const filteredCalendarTodos = todos.filter(todo => {
-    const matchesDateRange = isInDateRange(todo.createdAt, dateRange);
-    const matchesSearch = todo.title.toLowerCase().includes(filter.search.toLowerCase());
-    const matchesPriority = filter.priority === 'all' || todo.priority === filter.priority;
-    const matchesLabels = filter.labels.length === 0 || 
-      filter.labels.every(label => todo.labels?.includes(label));
-
-    return matchesDateRange && matchesSearch && matchesPriority && matchesLabels;
-  });
-
-  const handleExport = () => {
-    exportToCSV(todos, dateRange);
-  };
-
-  const fadeIn = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.6 }
-  };
-
-  const handleTabChange = (newTab: string) => {
-    setActiveTab(newTab);
-    setIsFormVisible(false);
-    setEditingTodo(null);
-    window.history.pushState({}, '', `?tab=${newTab}`);
-  };
-
-  // Add this helper function to add toasts
-  const addToast = (toast: Omit<ToastMessage, 'id'>) => {
-    const newToast = {
-      ...toast,
-      id: Math.random().toString(36).substr(2, 9)
-    };
-    setToasts(prev => [...prev, newToast]);
-
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== newToast.id));
-    }, 5000);
-  };
-
+  // 5. Render logic
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -587,116 +327,89 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Main Content */}
-      <main className="pt-24 pb-12 px-4">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            initial="initial"
-            animate="animate"
-            variants={fadeIn}
-          >
-            <TabNavigation
-              tabs={[
-                { id: 'tasks', label: 'Tasks' },
-                { id: 'goals', label: 'Goals' },
-                { id: 'analytics', label: 'Analytics' }
-              ]}
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-            />
-            
-            <div className="mt-8">
-              <AnimatePresence mode="wait">
-                {(activeTab === 'tasks' || activeTab === 'dashboard') && (
-                  <motion.div
-                    key="tasks"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="grid grid-cols-2 gap-6">
-                      {/* Left side - Task List */}
-                      <div className="space-y-4">
-                        <motion.button
-                          onClick={() => setIsFormVisible(true)}
-                          className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                          whileHover={{ scale: 1.01 }}
-                          whileTap={{ scale: 0.99 }}
-                        >
-                          <span className="text-xl">+</span>
-                          <span>Add New Task</span>
-                        </motion.button>
-
-                        {isFormVisible ? (
-                          <TaskForm
-                            onSubmit={addTodo}
-                            onCancel={() => setIsFormVisible(false)}
-                          />
-                        ) : (
-                    <TaskList
-                            tasks={filteredTodos}
-                      onToggle={toggleTodo}
-                      onDelete={deleteTodo}
-                            onEdit={updateTodo}
-                      onDragEnd={onDragEnd}
-                      onAddTodo={addTodo}
-                      filters={taskFilters}
-                            onFilterChange={setTaskFilters}
-                      availableLabels={Array.from(new Set(todos.flatMap(todo => todo.labels || [])))}
+    <div className="space-y-8">
+      <div className="space-y-6">
+        <AnimatePresence mode="wait">
+          {currentTab === 'tasks' && (
+            <motion.div
+              key="tasks"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-6">
+                  {isFormVisible ? (
+                    <TaskForm
+                      onSubmit={handleAddTodo}
+                      onCancel={() => setIsFormVisible(false)}
                     />
-                        )}
-                      </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsFormVisible(true)}
+                      className="w-full p-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors"
+                    >
+                      + Add New Task
+                    </button>
+                  )}
 
-                      {/* Right side - Calendar */}
-                      <div>
-                        <Calendar
-                          tasks={filteredCalendarTodos}
-                          onTaskClick={(task) => setEditingTodo(task)}
-                          onToggle={toggleTodo}
-                          onDelete={deleteTodo}
-                          onEdit={updateTodo}
-                        />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-                
-                {activeTab === 'goals' && (
-                  <motion.div
-                    key="goals"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Goals userId={user?.uid || ''} todos={todos} />
-                  </motion.div>
-                )}
+                  <TaskList
+                    todos={todos.filter(todo => 
+                      taskFilters.showCompleted ? true : !todo.completed
+                    )}
+                    onToggle={handleToggle}
+                    onDelete={(id) => {}} // Implement delete handler
+                    onEdit={(todo) => setEditingTodo(todo)}
+                    filters={taskFilters}
+                    onFilterChange={setTaskFilters}
+                  />
+                </div>
 
-                {activeTab === 'analytics' && (
-                  <motion.div
-                    key="analytics"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <AnalyticsDashboard
-                      todos={todos}
-                      dateRange={dateRange}
-                      onDateRangeChange={setDateRange}
-                      onExport={handleExport}
-                      analytics={calculateAnalytics(todos)}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
-        </div>
-      </main>
+                <div className="lg:sticky lg:top-24">
+                  <Calendar
+                    tasks={todos}
+                    onTaskClick={(task) => setEditingTodo(task)}
+                    onToggle={handleToggle}
+                    onDelete={(id) => {}} // Implement delete handler
+                    onEdit={(todo) => setEditingTodo(todo)}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {currentTab === 'goals' && (
+            <motion.div
+              key="goals"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {user && <Goals userId={user.uid} todos={todos} />}
+            </motion.div>
+          )}
+
+          {currentTab === 'analytics' && (
+            <motion.div
+              key="analytics"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <AnalyticsDashboard
+                todos={todos}
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
+                onExport={() => {}} // Implement export handler
+                analytics={calculateAnalytics(todos)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Toast Notifications */}
       <div className="fixed bottom-4 left-4 space-y-2 z-50">
@@ -706,21 +419,11 @@ export default function DashboardPage() {
               key={toast.id}
               message={toast.message}
               type={toast.type}
-              onUndo={toast.undoAction}
               onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
             />
           ))}
         </AnimatePresence>
       </div>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <Settings 
-          user={user} 
-          isOpen={showSettings} 
-          onClose={() => setShowSettings(false)} 
-        />
-      )}
     </div>
   );
 } 

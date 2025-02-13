@@ -28,28 +28,27 @@ const DraggableMotionDiv = motion(
 DraggableMotionDiv.displayName = 'DraggableMotionDiv';
 
 interface TaskListProps {
-  tasks: Todo[];
-  onToggle: (id: string, completed: boolean) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  todos: Todo[];
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
   onEdit: (todo: Todo) => void;
-  onDragEnd: (result: DropResult) => void;
-  onAddTodo: (todo: Partial<Todo>) => Promise<void>;
   filters: TaskFiltersState;
   onFilterChange: (filters: TaskFiltersState) => void;
-  availableLabels: string[];
 }
 
 export default function TaskList({ 
-  tasks, 
+  todos, 
   onToggle, 
   onDelete, 
-  onEdit, 
-  onDragEnd,
-  onAddTodo,
+  onEdit,
   filters,
-  onFilterChange,
-  availableLabels
+  onFilterChange
 }: TaskListProps) {
+  // Extract unique labels from all todos
+  const availableLabels = Array.from(
+    new Set(todos.flatMap(todo => todo.labels || []))
+  );
+
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<Todo | null>(null);
 
@@ -64,30 +63,40 @@ export default function TaskList({
     }
   };
 
+  // Filter todos based on all criteria
+  const filteredTodos = todos.filter(todo => {
+    // Filter by search term
+    if (filters.search && !todo.title.toLowerCase().includes(filters.search.toLowerCase())) {
+      return false;
+    }
+
+    // Filter by priority
+    if (filters.priority !== 'all' && todo.priority !== filters.priority) {
+      return false;
+    }
+
+    // Filter by labels
+    if (filters.labels.length > 0 && !filters.labels.every(label => todo.labels?.includes(label))) {
+      return false;
+    }
+
+    // Filter by completion status
+    if (!filters.showCompleted && todo.completed) {
+      return false;
+    }
+
+    return true;
+  });
+
   return (
-    <div className="space-y-4">
-      <TaskFilters
+    <div className="space-y-6">
+      <TaskFilters 
         filters={filters}
-        onChange={onFilterChange}
+        onFilterChange={onFilterChange}
         availableLabels={availableLabels}
       />
       
-      <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-gray-100">
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={filters.showCompleted}
-            onChange={(e) => onFilterChange({
-              ...filters,
-              showCompleted: e.target.checked
-            })}
-            className="rounded border-gray-300"
-          />
-          Show Completed Tasks
-        </label>
-      </div>
-
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext>
         <Droppable droppableId="tasks">
           {(provided) => (
             <div
@@ -95,7 +104,7 @@ export default function TaskList({
               ref={provided.innerRef}
               className="space-y-2"
             >
-              {tasks.map((task, index) => (
+              {filteredTodos.map((task, index) => (
                 <Draggable 
                   key={task.id} 
                   draggableId={task.id} 
@@ -112,7 +121,7 @@ export default function TaskList({
                         <input
                           type="checkbox"
                           checked={task.completed}
-                          onChange={() => onToggle(task.id, !task.completed)}
+                          onChange={() => onToggle(task.id)}
                           className="h-5 w-5 rounded border-gray-300"
                         />
                         <div className="flex-1">

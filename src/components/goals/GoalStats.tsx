@@ -31,53 +31,51 @@ function StatCard({ icon, label, value, bgColor }: StatCardProps) {
   );
 }
 
-interface GoalStatsProps {
-  goals: GoalData[];
+interface GoalStats {
+  total: number;
+  completed: number;
+  inProgress: number;
+  notStarted: number;
 }
 
-export default function GoalStats({ goals }: GoalStatsProps) {
-  const stats = [
+interface GoalStatsProps {
+  stats: GoalStats;
+}
+
+export default function GoalStats({ stats }: GoalStatsProps) {
+  const statItems = [
     {
       label: 'Total Goals',
-      value: goals.length,
+      value: stats.total,
       bgColor: 'bg-indigo-100'
     },
     {
       label: 'Completed',
-      value: goals.filter(g => g.status === 'completed').length,
+      value: stats.completed,
       bgColor: 'bg-green-100'
     },
     {
-      label: 'High Priority',
-      value: goals.filter(g => g.priority === 'high' && g.status === 'in-progress').length,
-      bgColor: 'bg-red-100'
+      label: 'In Progress',
+      value: stats.inProgress,
+      bgColor: 'bg-yellow-100'
     },
     {
-      label: 'Due Soon',
-      value: goals.filter(g => {
-        const daysUntilDue = Math.ceil(
-          (timestampToDate(g.targetDate).getTime() - new Date().getTime()) / 
-          (1000 * 60 * 60 * 24)
-        );
-        return daysUntilDue <= 7 && daysUntilDue > 0 && g.status === 'in-progress';
-      }).length,
-      bgColor: 'bg-yellow-100'
+      label: 'Not Started',
+      value: stats.notStarted,
+      bgColor: 'bg-gray-100'
     }
   ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {stats.map((stat, index) => (
-        <motion.div
-          key={stat.label}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.1 }}
-          className={`${stat.bgColor} rounded-xl p-4`}
+      {statItems.map((item, index) => (
+        <div
+          key={item.label}
+          className={`${item.bgColor} rounded-xl p-4 text-center`}
         >
-          <div className="text-2xl font-bold mb-1">{stat.value}</div>
-          <div className="text-sm text-gray-600">{stat.label}</div>
-        </motion.div>
+          <h3 className="text-3xl font-bold mb-2">{item.value}</h3>
+          <p className="text-gray-600">{item.label}</p>
+        </div>
       ))}
     </div>
   );
