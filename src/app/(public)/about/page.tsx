@@ -57,55 +57,28 @@ export default function About() {
                 transition={{ duration: 0.5 }}
                 className="space-y-6"
               >
-                <motion.div 
-                  className="space-y-6 text-lg"
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <motion.p 
-                    className="text-gray-600"
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    Dear User,
-                  </motion.p>
-                  <motion.p 
-                    className="text-gray-600"
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    As a passionate developer and productivity enthusiast, I created Task Project 
-                    to solve a problem I personally faced: the need for a simple yet powerful task 
-                    management system that adapts to how people naturally work.
-                  </motion.p>
-                  <motion.p 
-                    className="text-gray-600"
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.5 }}
-                  >
-                    My goal was to combine intuitive design with powerful features, making it easier 
-                    for everyone to stay organized and accomplish their goals. This project represents 
-                    my commitment to creating tools that make a real difference in people's daily lives.
-                  </motion.p>
-                  <motion.p 
-                    className="text-gray-700 italic mt-8"
-                    initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.6 }}
-                  >
+                <div className="space-y-6 text-lg">
+                  <p className="text-gray-600">
+                    Dear valued user,
+                  </p>
+                  <p className="text-gray-600">
+                  Welcome to Task Project! I created this platform to help streamline 
+                  workflow and make task management more intuitive. 
+                  As a high-school student, I take productivity and 
+                  organization very seriously, and I created this 
+                  platform to help others do the same. I wanted to build a 
+                  tool that makes everyone's work and personal life a little easier.
+                  </p>
+                  <p className="text-gray-600">
+                    This platform combines intuitive design with powerful features, making it easier 
+                    for everyone to stay organized and accomplish their goals. With its core features,
+                    Task Project is a tool that can help you get more done.
+                  </p>
+                  <p className="text-gray-700 italic mt-8">
                     <span className="font-bold">From Sierra Mendoza,</span><br />
                     <span className="font-normal">Founder/Developer</span>
-                  </motion.p>
-                </motion.div>
+                  </p>
+                </div>
                 <motion.div 
                   className="pt-4"
                   whileHover={{ x: 5 }}
